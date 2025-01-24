@@ -6,29 +6,51 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/auth"
 	"github.com/devphaseX/buyr-api.git/internal/store"
+	"github.com/devphaseX/buyr-api.git/internal/store/cache"
+	"github.com/devphaseX/buyr-api.git/worker"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 
 type application struct {
-	cfg       config
-	logger    *zap.SugaredLogger
-	store     *store.Storage
-	authToken auth.AuthToken
+	cfg             config
+	wg              sync.WaitGroup
+	logger          *zap.SugaredLogger
+	store           *store.Storage
+	authToken       auth.AuthToken
+	cacheStore      *cache.Storage
+	taskDistributor worker.TaskDistributor
 }
 
 type config struct {
-	addr   string
-	env    string
-	apiURL string
+	addr       string
+	env        string
+	apiURL     string
+	db         dbConfig
+	redisCfg   redisConfig
+	mailConfig mailConfig
+}
 
-	db dbConfig
+type mailConfig struct {
+	exp      time.Duration
+	mailTrap mailTrapConfig
+}
+
+type mailTrapConfig struct {
+	fromEmail       string
+	smtpAddr        string
+	smtpSandboxAddr string
+	smtpPort        int
+	apiKey          string
+	username        string
+	password        string
 }
 
 type dbConfig struct {
@@ -36,6 +58,13 @@ type dbConfig struct {
 	maxOpenConns int
 	maxIdleConns int
 	maxIdleTime  string
+}
+
+type redisConfig struct {
+	addr    string
+	pw      string
+	db      int
+	enabled bool
 }
 
 func (app *application) routes() http.Handler {
@@ -46,6 +75,12 @@ func (app *application) routes() http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+
+	r.Route("/v1", func(r chi.Router) {
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", app.registerNormalUser)
+		})
+	})
 	return r
 }
 

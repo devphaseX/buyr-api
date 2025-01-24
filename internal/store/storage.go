@@ -13,11 +13,18 @@ var (
 	ErrDuplicateEmail    = errors.New("email already exists")
 )
 
+type UserStorage interface {
+	CreateNormalUser(context.Context, *NormalUser) error
+}
+
 type Storage struct {
+	Users UserStorage
 }
 
 func NewStorage(db *sql.DB) *Storage {
-	return &Storage{}
+	return &Storage{
+		Users: NewUserModel(db),
+	}
 }
 
 func withTrx(db *sql.DB, ctx context.Context, fn func(tx *sql.Tx) error) error {
