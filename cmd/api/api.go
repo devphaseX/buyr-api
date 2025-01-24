@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
@@ -17,11 +18,22 @@ import (
 type application struct {
 	cfg    config
 	logger *zap.SugaredLogger
+	store  *store.Storage
 }
 
 type config struct {
-	addr string
-	env  string
+	addr   string
+	env    string
+	apiURL string
+
+	db dbConfig
+}
+
+type dbConfig struct {
+	dsn          string
+	maxOpenConns int
+	maxIdleConns int
+	maxIdleTime  string
 }
 
 func (app *application) routes() http.Handler {
