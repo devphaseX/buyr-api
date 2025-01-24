@@ -4,7 +4,10 @@ import (
 	"log"
 
 	"github.com/devphaseX/buyr-api.git/internal/env"
+	"github.com/devphaseX/buyr-api.git/internal/validator"
 )
+
+var validate = validator.New()
 
 func main() {
 
