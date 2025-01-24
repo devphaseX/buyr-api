@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,10 +11,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
 )
 
 type application struct {
-	cfg config
+	cfg    config
+	logger *zap.SugaredLogger
 }
 
 type config struct {
@@ -40,8 +41,6 @@ func (app *application) serve() error {
 		Handler: app.routes(),
 	}
 
-	err := srv.ListenAndServe()
-
 	shutdownError := make(chan error)
 
 	go func() {
@@ -51,7 +50,7 @@ func (app *application) serve() error {
 
 		s := <-quit
 
-		fmt.Println("caught signal signal ", s.String())
+		app.logger.Infow("caught signal", "signal", s.String())
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 		defer cancel()
@@ -63,6 +62,9 @@ func (app *application) serve() error {
 		}
 	}()
 
+	app.logger.Infow("server has started", "addr", app.cfg.addr, "env", app.cfg.env)
+	err := srv.ListenAndServe()
+
 	if !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -72,5 +74,6 @@ func (app *application) serve() error {
 		return err
 	}
 
+	app.logger.Infow("server has stopped", "addr", app.cfg.addr, "env", app.cfg.env)
 	return nil
 }
