@@ -32,7 +32,9 @@ type Storage struct {
 }
 
 func NewRedisStorage(rdb *redis.Client) *Storage {
-	return &Storage{}
+	return &Storage{
+		Tokens: NewRedisTokenModel(rdb),
+	}
 }
 
 func generateToken(userID string, ttl time.Duration, scope string) (*Token, error) {

@@ -20,12 +20,13 @@ type MailTrapClient struct {
 	logger          *zap.SugaredLogger
 }
 
-func NewMailTrapClient(fromEmail, smtpAddr, smtpSandboxAddr, username, password string, smtpPort int, logger *zap.SugaredLogger) *MailTrapClient {
+func NewMailTrapClient(fromEmail, smtpAddr, smtpSandboxAddr, username, password string, smtpPort int, isSandbox bool, logger *zap.SugaredLogger) *MailTrapClient {
 	return &MailTrapClient{
 		smtpAddr:        smtpAddr,
 		smtpSandboxAddr: smtpSandboxAddr,
 		smtpPort:        smtpPort,
 		username:        username,
+		isSandbox:       isSandbox,
 		password:        password,
 		fromEmail:       fromEmail,
 		logger:          logger,
@@ -77,9 +78,6 @@ func (c *MailTrapClient) Send(option *MailOption, data any) error {
 
 	message.SetBody("text/html", body.String())
 
-	// if len(option.attachFiles) > 0 {
-
-	// }
 	smtpAddr := c.smtpAddr
 
 	if c.isSandbox {
@@ -87,7 +85,6 @@ func (c *MailTrapClient) Send(option *MailOption, data any) error {
 	}
 
 	dailer := gomail.NewDialer(smtpAddr, c.smtpPort, c.username, c.password)
-
 	err = dailer.DialAndSend(message)
 
 	if err != nil {

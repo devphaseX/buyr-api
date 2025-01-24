@@ -19,9 +19,10 @@ var validate = validator.New()
 
 func main() {
 	cfg := config{
-		apiURL: env.GetString("API_URL", "localhost:8080"),
-		addr:   env.GetString("ADDR", ":8080"),
-		env:    env.GetString("ENV", "development"),
+		apiURL:    env.GetString("API_URL", "localhost:8080"),
+		clientURL: env.GetString("CLIENT_URL", "http://localhost:3000"),
+		addr:      env.GetString("ADDR", ":8080"),
+		env:       env.GetString("ENV", "development"),
 		db: dbConfig{
 			dsn:          env.GetString("DB_ADDR", "postgres://mingle:adminpassword@localhost/mingle?sslmode=disable"),
 			maxOpenConns: env.GetInt("DB_MAX_OPEN_CONNS", 30),
@@ -45,6 +46,7 @@ func main() {
 				smtpSandboxAddr: env.GetString("MAIL_TRAP_SANDBOX_ADDR", "sandbox.smtp.mailtrap.io"),
 				smtpPort:        env.GetInt("MAIL_TRAP_SMTP_PORT", 0),
 				username:        env.GetString("MAIL_TRAP_USERNAME", ""),
+				isSandbox:       env.GetBool("MAIL_TRAP_SANDBOX_ENABLED", true),
 				password:        env.GetString("MAIL_TRAP_PASSWORD", ""),
 			},
 		},
@@ -88,6 +90,7 @@ func main() {
 			cfg.mailConfig.mailTrap.username,
 			cfg.mailConfig.mailTrap.password,
 			cfg.mailConfig.mailTrap.smtpPort,
+			cfg.mailConfig.mailTrap.isSandbox,
 			logger,
 		)
 		app.runTaskProcessor(redisOpts, store, cacheStore, mailClient)

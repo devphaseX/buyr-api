@@ -10,10 +10,10 @@ CREATE TABLE IF NOT EXISTS addresses (
     is_default boolean,
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );
 
 -- COMMENT ON COLUMN addresses.address_type IS '"home", "work", "other"';

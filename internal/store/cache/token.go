@@ -42,9 +42,9 @@ func (m *RedisTokenModel) Insert(token *Token) error {
 	return nil
 }
 
-func (m *RedisTokenModel) DeleteAllForUser(scope string, userID int64) error {
+func (m *RedisTokenModel) DeleteAllForUser(scope string, userID string) error {
 	// Create a Redis key using the scope and user ID
-	key := fmt.Sprintf("%s:%d", scope, userID)
+	key := fmt.Sprintf("%s:%s", scope, userID)
 
 	// Delete the token from Redis
 	err := m.client.Del(context.Background(), key).Err()

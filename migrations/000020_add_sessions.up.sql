@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS sessions (
     id varchar(255) PRIMARY KEY,
-    user_id BIGINT NOT NULL,
+    user_id VARCHAR(50) NOT NULL,
     user_agent varchar(255) NOT NULL,
     ip varchar(45) NOT NULL,
     version integer DEFAULT 1,

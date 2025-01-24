@@ -10,10 +10,10 @@ CREATE TABLE IF NOT EXISTS products (
     category_id varchar(500),
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );
 
 ALTER TABLE products ADD CONSTRAINT products_category_id_fk FOREIGN KEY (category_id) REFERENCES category (id) ON DELETE SET NULL,

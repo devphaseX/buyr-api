@@ -41,6 +41,11 @@ db/migrations/up: confirm
 	@echo 'Running up migrations...'
 	migrate -path ./migrations -database ${DB_ADDR} up
 
+.PHONY: db/migrations/down
+db/migrations/down: confirm
+	@echo 'Running up migrations...'
+	migrate -path ./migrations -database ${DB_ADDR} down
+
 # ==================================================================================== #
 # QUALITY CONTROL
 # ==================================================================================== #

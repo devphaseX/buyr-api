@@ -6,13 +6,12 @@ CREATE TABLE IF NOT EXISTS cart_items (
     added_at timestamp
     with
         time zone,
-        quantity integer,
         created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );
 
 ALTER TABLE cart_items ADD CONSTRAINT cart_items_cart_id_fk FOREIGN KEY (cart_id) REFERENCES carts (id),

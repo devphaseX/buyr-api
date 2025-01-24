@@ -11,8 +11,10 @@ CREATE TABLE IF NOT EXISTS orders (
     payment_method varchar(50),
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
+    with
+        time zone default now ()
 );
 
 ALTER TABLE orders ADD CONSTRAINT orders_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL;

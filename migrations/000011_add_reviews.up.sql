@@ -6,10 +6,10 @@ CREATE TABLE IF NOT EXISTS reviews (
     comment text,
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );
 
 ALTER TABLE reviews ADD CONSTRAINT reviews_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id),

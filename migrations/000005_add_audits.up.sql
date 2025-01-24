@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS audits (
     details text,
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );

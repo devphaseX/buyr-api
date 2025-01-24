@@ -61,5 +61,9 @@ func (processor *RedisTaskProcessor) ProcessTaskSendActivateAcctEmail(ctx contex
 		ActivationURL: fmt.Sprintf("%s/confirm/%s", payload.ClientURL, payload.Token),
 	})
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

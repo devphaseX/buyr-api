@@ -7,10 +7,10 @@ CREATE TABLE IF NOT EXISTS admin_users (
     two_factor_auth_enabled boolean,
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );
 
-ALTER TABLE admin_users ADD CONSTRAINT admin_users_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id);
+ALTER TABLE admin_users ADD CONSTRAINT admin_users_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;

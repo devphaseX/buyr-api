@@ -98,7 +98,7 @@ func NewUserModel(db *sql.DB) *UserModel {
 // createUser inserts a new user into the database.
 func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	query := `
-		INSERT INTO users(id, email, password, role)
+		INSERT INTO users(id, email, password_hash, role)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at, updated_at
 	`
@@ -109,7 +109,8 @@ func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryDurationTimeout)
 	defer cancel()
 
-	err := tx.QueryRowContext(ctx, query, args).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+
 	if err != nil {
 		var pgErr *pq.Error
 		if errors.As(err, &pgErr) {
@@ -137,7 +138,7 @@ func createNormalUser(ctx context.Context, tx *sql.Tx, user *NormalUser) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryDurationTimeout)
 	defer cancel()
 
-	err := tx.QueryRowContext(ctx, query, args).Scan(&user.ID, &user.UserID, &user.CreatedAt, &user.UpdatedAt)
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&user.ID, &user.UserID, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create normal user: %w", err)
 	}
@@ -159,7 +160,7 @@ func createVendorUser(ctx context.Context, tx *sql.Tx, user *VendorUser) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryDurationTimeout)
 	defer cancel()
 
-	err := tx.QueryRowContext(ctx, query, args).Scan(&user.ID, &user.UserID, &user.CreatedAt, &user.UpdatedAt)
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&user.ID, &user.UserID, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create vendor user: %w", err)
 	}

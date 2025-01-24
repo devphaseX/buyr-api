@@ -4,10 +4,10 @@ CREATE TABLE IF NOT EXISTS wishlists (
     product_id varchar(50),
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );
 
 ALTER TABLE wishlists ADD CONSTRAINT wishlists_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id),

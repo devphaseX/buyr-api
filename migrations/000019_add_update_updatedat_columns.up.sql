@@ -1,5 +1,5 @@
-BEGIN
-
+BEGIN;
+-- Create the function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -8,41 +8,36 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
+-- Create triggers
 CREATE TRIGGER update_audits_updated_at
 BEFORE UPDATE ON audits
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_whitelists_updated_at
-BEFORE UPDATE ON whitelists
+CREATE TRIGGER update_wishlists_updated_at
+BEFORE UPDATE ON wishlists
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
-
 
 CREATE TRIGGER update_category_updated_at
 BEFORE UPDATE ON category
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
-
 CREATE TRIGGER update_users_updated_at
 BEFORE UPDATE ON users
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
-
 
 CREATE TRIGGER update_product_features_updated_at
 BEFORE UPDATE ON product_features
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
-
 CREATE TRIGGER update_vendor_users_updated_at
 BEFORE UPDATE ON vendor_users
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
-
 
 CREATE TRIGGER update_notifications_updated_at
 BEFORE UPDATE ON notifications
@@ -69,12 +64,10 @@ BEFORE UPDATE ON admin_users
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
-
 CREATE TRIGGER update_product_images_updated_at
 BEFORE UPDATE ON product_images
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
-
 
 CREATE TRIGGER update_order_items_updated_at
 BEFORE UPDATE ON order_items
@@ -96,10 +89,9 @@ BEFORE UPDATE ON addresses
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
-
 CREATE TRIGGER update_cart_items_updated_at
 BEFORE UPDATE ON cart_items
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
-COMMIT
+COMMIT;

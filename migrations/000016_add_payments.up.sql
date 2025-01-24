@@ -7,10 +7,10 @@ CREATE TABLE IF NOT EXISTS payments (
     transaction_id varchar(50),
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );
 
 -- COMMENT ON COLUMN payments.payment_method IS '"credit_card", "stripe", "bank_transfer"';

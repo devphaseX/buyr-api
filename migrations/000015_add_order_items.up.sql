@@ -3,7 +3,13 @@ CREATE TABLE IF NOT EXISTS order_items (
     order_id varchar(50),
     product_id varchar(50),
     quantity integer,
-    price decimal
+    price decimal,
+    created_at timestamp
+    with
+        time zone default now (),
+        updated_at timestamp
+    with
+        time zone default now ()
 );
 
 ALTER TABLE order_items ADD CONSTRAINT order_items_order_id_fk FOREIGN KEY (order_id) REFERENCES orders (id),

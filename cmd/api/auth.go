@@ -13,10 +13,10 @@ import (
 )
 
 type registerUserForm struct {
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Email     string `json:"email"`
-	Password  string `json:"password"`
+	FirstName string `json:"first_name" validate:"required,min=1,max=255"`
+	LastName  string `json:"last_name" validate:"required,min=1,max=255"`
+	Email     string `json:"email" validate:"required,email"`
+	Password  string `json:"password" validate:"required,min=8,max=20"`
 }
 
 func (app *application) registerNormalUser(w http.ResponseWriter, r *http.Request) {
@@ -76,10 +76,17 @@ func (app *application) registerNormalUser(w http.ResponseWriter, r *http.Reques
 		asynq.Queue(worker.QueueCritical),
 	}
 
-	app.taskDistributor.DistributeTaskSendActivateAccountEmail(r.Context(), &worker.PayloadSendActivateAcctEmail{
-		Username: fmt.Sprintf("%s %s", user.FirstName, user.LastName),
-		Token:    activationToken.Plaintext,
+	err = app.taskDistributor.DistributeTaskSendActivateAccountEmail(r.Context(), &worker.PayloadSendActivateAcctEmail{
+		Username:  fmt.Sprintf("%s %s", user.FirstName, user.LastName),
+		Email:     user.User.Email,
+		ClientURL: app.cfg.clientURL,
+		Token:     activationToken.Plaintext,
 	}, asynqOpts...)
 
-	app.logger.Info("activation token", activationToken)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.successResponse(w, http.StatusCreated, nil)
 }

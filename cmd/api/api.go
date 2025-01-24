@@ -33,6 +33,7 @@ type config struct {
 	addr       string
 	env        string
 	apiURL     string
+	clientURL  string
 	db         dbConfig
 	redisCfg   redisConfig
 	mailConfig mailConfig
@@ -51,6 +52,7 @@ type mailTrapConfig struct {
 	apiKey          string
 	username        string
 	password        string
+	isSandbox       bool
 }
 
 type dbConfig struct {

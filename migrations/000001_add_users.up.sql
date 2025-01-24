@@ -8,10 +8,10 @@ CREATE TABLE IF NOT EXISTS users (
     is_active boolean,
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );
 
 ALTER TABLE users ADD CONSTRAINT unique_email UNIQUE (email);

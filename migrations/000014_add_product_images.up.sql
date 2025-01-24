@@ -5,10 +5,10 @@ CREATE TABLE IF NOT EXISTS product_images (
     is_primary boolean,
     created_at timestamp
     with
-        time zone,
+        time zone default now (),
         updated_at timestamp
     with
-        time zone
+        time zone default now ()
 );
 
 ALTER TABLE product_images ADD CONSTRAINT product_images_product_id_fk FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE;
