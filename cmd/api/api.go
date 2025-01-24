@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/devphaseX/buyr-api.git/internal/auth"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -16,9 +17,10 @@ import (
 )
 
 type application struct {
-	cfg    config
-	logger *zap.SugaredLogger
-	store  *store.Storage
+	cfg       config
+	logger    *zap.SugaredLogger
+	store     *store.Storage
+	authToken auth.AuthToken
 }
 
 type config struct {
