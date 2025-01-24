@@ -3,7 +3,10 @@ package db
 import (
 	"context"
 	"database/sql"
+	"math/rand"
 	"time"
+
+	"github.com/oklog/ulid/v2"
 )
 
 func New(addr string, maxOpenConns, maxIdleConns int, maxIdleTime string) (*sql.DB, error) {
@@ -40,4 +43,14 @@ func New(addr string, maxOpenConns, maxIdleConns int, maxIdleTime string) (*sql.
 	}
 
 	return db, nil
+}
+
+func GenerateULID() string {
+	// Create a new entropy source using the current time
+	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// Generate a new ULID
+	id := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
+
+	return id.String()
 }

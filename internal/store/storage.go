@@ -3,6 +3,14 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"time"
+)
+
+var (
+	QueryDurationTimeout = time.Second * 5
+	ErrRecordNotFound    = errors.New("record not found")
+	ErrDuplicateEmail    = errors.New("email already exists")
 )
 
 type Storage struct {

@@ -13,3 +13,5 @@ CREATE TABLE IF NOT EXISTS users (
     with
         time zone
 );
+
+ALTER TABLE users ADD CONSTRAINT unique_email UNIQUE (email);

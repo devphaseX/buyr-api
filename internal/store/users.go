@@ -1,8 +1,13 @@
 package store
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"time"
+
+	"github.com/devphaseX/buyr-api.git/internal/db"
+	"github.com/lib/pq"
 )
 
 type User struct {
@@ -65,4 +70,36 @@ type UserModel struct {
 
 func NewUserModel(db *sql.DB) *UserModel {
 	return &UserModel{db}
+}
+
+func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
+	query := `
+		INSERT INTO users(id, email,password, role)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at, updated_at
+	`
+
+	id := db.GenerateULID()
+	args := []any{id, user.Email, pq.Array(user.Password), user.Role}
+
+	ctx, cancel := context.WithTimeout(ctx, QueryDurationTimeout)
+	defer cancel()
+	err := tx.QueryRowContext(ctx, query, args).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+
+	if err != nil {
+		// Check for unique constraint violation (duplicate email)
+		var pgErr *pq.Error
+
+		switch {
+		case errors.As(err, &pgErr):
+			if pgErr.Code == "23505" && pgErr.Constraint == "unique_email" {
+				return ErrDuplicateEmail
+			}
+
+		case errors.Is(err, sql.ErrNoRows):
+			return ErrRecordNotFound
+		}
+	}
+
+	return nil
 }
