@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	"github.com/devphaseX/buyr-api.git/internal/db"
 	"github.com/devphaseX/buyr-api.git/internal/env"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/validator"
@@ -27,7 +28,7 @@ func main() {
 	logger := zap.Must(zap.NewProduction()).Sugar()
 	defer logger.Sync()
 
-	db, err := openDB(cfg)
+	db, err := db.New(cfg.db.dsn, cfg.db.maxOpenConns, cfg.db.maxIdleConns, cfg.db.maxIdleTime)
 
 	if err != nil {
 		logger.Panic(err)

@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-func openDB(cfg config) (*sql.DB, error) {
-	db, err := sql.Open("postgres", cfg.db.dsn)
+func New(addr string, maxOpenConns, maxIdleConns int, maxIdleTime string) (*sql.DB, error) {
+	db, err := sql.Open("postgres", addr)
 
 	if err != nil {
 		return nil, err
@@ -15,16 +15,16 @@ func openDB(cfg config) (*sql.DB, error) {
 
 	// Set the maximum number of open (in-use + idle) connections in the pool. Note that
 	// passing a value less than or equal to 0 will mean there is no limit.
-	db.SetMaxOpenConns(cfg.db.maxOpenConns)
+	db.SetMaxOpenConns(maxOpenConns)
 
 	// Set the maximum number of idle connections in the pool. Again, passing a value
 	// less than or equal to 0 will mean there is no limit.
-	db.SetMaxIdleConns(cfg.db.maxIdleConns)
+	db.SetMaxIdleConns(maxIdleConns)
 
 	// Use the time.ParseDuration() function to convert the idle timeout duration string
 	// to a time.Duration type.
 
-	maxIdleDuration, err := time.ParseDuration(cfg.db.maxIdleTime)
+	maxIdleDuration, err := time.ParseDuration(maxIdleTime)
 	if err != nil {
 		return nil, err
 	}
