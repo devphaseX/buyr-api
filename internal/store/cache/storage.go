@@ -11,12 +11,14 @@ import (
 )
 
 const (
-	ScopeActivation = "activation"
+	ScopeActivation        = "activation"
+	ForgetPassword         = "forget_password"
+	Require2faConfirmation = "require_2fa_confirmation"
 )
 
 type Token struct {
 	Plaintext string    `json:"-"`
-	Hash      []byte    `json:"hash"`
+	Hash      []byte    `json:"-"`
 	UserID    string    `json:"user_id"`
 	Expiry    time.Time `json:"expiry"`
 	Scope     string    `json:"scope"`
@@ -24,9 +26,9 @@ type Token struct {
 }
 
 type TokenStore interface {
-	New(userID string, ttl time.Duration, scope string) (*Token, error)
-	Insert(ctx context.Context, token *Token) error
-	Get(ctx context.Context, scope, userID, tokenKey string) (*Token, error)
+	New(userID string, ttl time.Duration, scope string, data []byte) (*Token, error)
+	Insert(ctx context.Context, token *Token, key ...string) error
+	Get(ctx context.Context, scope, tokenKey string) (*Token, error)
 	DeleteAllForUser(ctx context.Context, scope string, userID string) error
 }
 
@@ -40,11 +42,12 @@ func NewRedisStorage(rdb *redis.Client) *Storage {
 	}
 }
 
-func generateToken(userID string, ttl time.Duration, scope string) (*Token, error) {
+func generateToken(userID string, ttl time.Duration, scope string, data []byte) (*Token, error) {
 	token := &Token{
 		UserID: userID,
 		Expiry: time.Now().Add(ttl),
 		Scope:  scope,
+		Data:   data,
 	}
 
 	randomBytes := make([]byte, 16)

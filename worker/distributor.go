@@ -7,6 +7,7 @@ import (
 )
 
 type TaskDistributor interface {
+	DistributeTaskSendRecoverAccountEmail(ctx context.Context, payload *PayloadSendRecoverAccountEmail, opts ...asynq.Option) error
 	DistributeTaskSendActivateAccountEmail(ctx context.Context, payload *PayloadSendActivateAcctEmail, opts ...asynq.Option) error
 }
 

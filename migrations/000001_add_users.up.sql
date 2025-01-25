@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash bytea,
     avatar_url text,
     role varchar(50),
+    auth_secret text,
+    two_factor_auth_enabled boolean default false,
     email_verified_at timestamp,
     is_active boolean default true,
     created_at timestamp

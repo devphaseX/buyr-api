@@ -3,8 +3,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
     first_name varchar(255),
     last_name varchar(255),
     user_id varchar(50),
-    auth_secret text,
-    two_factor_auth_enabled boolean,
+    level varchar(50),
     created_at timestamp
     with
         time zone default now (),

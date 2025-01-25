@@ -63,13 +63,13 @@ func (app *application) setAuthCookiesAndRespond(
 	// Create the response envelope
 	response := envelope{
 		"access_token":        accessToken,
-		"access_token_expiry": time.Now().Add(accessTokenExpiry).Unix(), // Unix timestamp for expiry
+		"access_token_expiry": time.Now().Add(accessTokenExpiry), // Unix timestamp for expiry
 	}
 
 	// Conditionally add refresh token fields to the response
 	if newRefreshToken != "" {
 		response["refresh_token"] = newRefreshToken
-		response["refresh_token_expiry"] = time.Now().Add(rememberPeriod).Unix()
+		response["refresh_token_expiry"] = time.Now().Add(rememberPeriod)
 	}
 
 	// Send the success response

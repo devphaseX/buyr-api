@@ -11,6 +11,7 @@ import (
 	"github.com/devphaseX/buyr-api.git/internal/mailer"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/store/cache"
+	"github.com/devphaseX/buyr-api.git/internal/totp.go"
 	"github.com/devphaseX/buyr-api.git/internal/validator"
 	"github.com/devphaseX/buyr-api.git/worker"
 	"github.com/hibiken/asynq"
@@ -85,12 +86,13 @@ func main() {
 
 	taskDistributor := worker.NewTaskDistributor(redisOpts)
 	authToken, err := auth.NewPasetoToken(cfg.authConfig.AccessSecretKey, cfg.authConfig.RefreshSecretKey)
-
+	totp := totp.New()
 	if err != nil {
 		logger.Panic(err)
 	}
 	app := &application{
 		cfg:             cfg,
+		totp:            totp,
 		logger:          logger,
 		store:           store,
 		cacheStore:      cacheStore,

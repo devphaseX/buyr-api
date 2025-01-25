@@ -13,6 +13,7 @@ import (
 	"github.com/devphaseX/buyr-api.git/internal/auth"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/store/cache"
+	"github.com/devphaseX/buyr-api.git/internal/totp.go"
 	"github.com/devphaseX/buyr-api.git/worker"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -21,6 +22,7 @@ import (
 
 type application struct {
 	cfg             config
+	totp            totp.TOTP
 	wg              sync.WaitGroup
 	logger          *zap.SugaredLogger
 	store           *store.Storage
@@ -94,6 +96,7 @@ func (app *application) routes() http.Handler {
 			r.Post("/register", app.registerNormalUser)
 			r.Post("/sign-in", app.signIn)
 			r.Post("/refresh", app.refreshToken)
+			r.Post("/forget-password", app.forgetPassword)
 		})
 
 		r.Route("/users", func(r chi.Router) {

@@ -64,6 +64,7 @@ func (app *application) registerNormalUser(w http.ResponseWriter, r *http.Reques
 		user.UserID,
 		time.Hour*24*3,
 		cache.ScopeActivation,
+		nil,
 	)
 
 	if err != nil {
@@ -78,8 +79,7 @@ func (app *application) registerNormalUser(w http.ResponseWriter, r *http.Reques
 	}
 
 	asynqOpts := []asynq.Option{
-		asynq.MaxRetry(10),
-		asynq.ProcessIn(time.Second * 10),
+		asynq.MaxRetry(3),
 		asynq.Queue(worker.QueueCritical),
 	}
 
@@ -109,7 +109,7 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ScopeActivation, userID, tokenKey)
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ScopeActivation, tokenKey)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -227,6 +227,32 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if user.TwoFactorAuthEnabled {
+		token, err := app.cacheStore.Tokens.New(
+			user.ID,
+			time.Hour*4,
+			cache.Require2faConfirmation,
+			nil,
+		)
+
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		err = app.cacheStore.Tokens.Insert(r.Context(), token, token.Plaintext)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		app.successResponse(w, http.StatusOK, envelope{
+			"mfa_enabled":    true,
+			"mfa_auth_token": token.Plaintext,
+		})
+		return
+	}
+
 	accessToken, err := app.authToken.GenerateAccessToken(user.ID, session.ID, app.cfg.authConfig.AccessTokenTTL)
 
 	if err != nil {
@@ -247,6 +273,90 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		refreshToken,
 		sessionExpiry,
 	)
+}
+
+type verify2FAForm struct {
+	MfaToken string `json:"mfa_token" validate:"required"`
+	MfaCode  string `json:"mfa_code" validate:"required,min=6,max=6"` // Assuming 6-digit codes
+}
+
+func (app *application) verify2FA(w http.ResponseWriter, r *http.Request) {
+	var form verify2FAForm
+
+	// Parse and validate the request body
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	// Fetch the token from the cache
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Require2faConfirmation, form.MfaToken)
+	if err != nil {
+		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
+		return
+	}
+
+	// Verify the token scope
+	if token.Scope != cache.Require2faConfirmation {
+		app.unauthorizedResponse(w, r, "invalid 2FA token")
+		return
+	}
+
+	// Fetch the user
+	user, err := app.store.Users.GetByID(r.Context(), token.UserID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Verify the 2FA code (e.g., using a TOTP library)
+	if !app.totp.VerifyCode(form.MfaCode, user.AuthSecret) {
+		app.unauthorizedResponse(w, r, "invalid 2FA code")
+		return
+	}
+
+	// Delete the token after successful verification
+	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), user.ID, form.MfaToken); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Create a new session
+	sessionExpiry := app.cfg.authConfig.RefreshTokenTTL
+	session := &store.Session{
+		UserID:    user.ID,
+		IP:        r.RemoteAddr,
+		UserAgent: r.UserAgent(),
+		Version:   1,
+		ExpiresAt: time.Now().Add(sessionExpiry),
+	}
+
+	// Save the session
+	if err := app.store.Sessions.Create(r.Context(), session); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Generate access and refresh tokens
+	accessToken, err := app.authToken.GenerateAccessToken(user.ID, session.ID, app.cfg.authConfig.AccessTokenTTL)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	refreshToken, err := app.authToken.GenerateRefreshToken(session.ID, session.Version, sessionExpiry)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Set cookies and respond
+	app.setAuthCookiesAndRespond(w, accessToken, app.cfg.authConfig.AccessTokenTTL, refreshToken, sessionExpiry)
 }
 
 type refreshRequest struct {
@@ -319,4 +429,57 @@ func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
 		newRefreshToken,
 		rememberPeriod,
 	)
+}
+
+type forgetPasswordForm struct {
+	Email string `json:"email"`
+}
+
+func (app *application) forgetPassword(w http.ResponseWriter, r *http.Request) {
+	var form forgetPasswordForm
+
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	user, err := app.store.Users.GetByEmail(r.Context(), form.Email)
+
+	if err != nil {
+		app.successResponse(w, http.StatusOK, "")
+		return
+	}
+
+	token, err := app.cacheStore.Tokens.New(user.ID, time.Hour*4, cache.ForgetPassword, nil)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.cacheStore.Tokens.Insert(r.Context(), token)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	asynqOpts := []asynq.Option{
+		asynq.MaxRetry(3),
+		asynq.Queue(worker.QueueCritical),
+	}
+
+	err = app.taskDistributor.DistributeTaskSendRecoverAccountEmail(r.Context(), &worker.PayloadSendRecoverAccountEmail{
+		UserID:    user.ID,
+		Email:     user.Email,
+		ClientURL: app.cfg.clientURL,
+		Token:     token.Plaintext,
+	}, asynqOpts...)
+
+	app.successResponse(w, http.StatusNoContent, nil)
 }

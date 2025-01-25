@@ -14,15 +14,55 @@ import (
 
 // User represents a user in the system.
 type User struct {
-	ID              string     `json:"id"`
-	Email           string     `json:"email"`
-	Password        password   `json:"-"`
-	AvatarURL       string     `json:"avatar_url"`
-	Role            string     `json:"role"`
-	EmailVerifiedAt *time.Time `json:"email_verified_at"`
-	IsActive        bool       `json:"is_active"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID                   string     `json:"id"`
+	Email                string     `json:"email"`
+	Password             password   `json:"-"`
+	AvatarURL            string     `json:"avatar_url"`
+	Role                 string     `json:"role"`
+	EmailVerifiedAt      *time.Time `json:"email_verified_at"`
+	AuthSecret           string     `json:"auth_secret"`
+	TwoFactorAuthEnabled bool       `json:"two_factor_auth_enabled"`
+	IsActive             bool       `json:"is_active"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
+}
+
+// NormalUser represents a normal user in the system.
+type NormalUser struct {
+	ID          string    `json:"id"`
+	FirstName   string    `json:"first_name"`
+	LastName    string    `json:"last_name"`
+	PhoneNumber string    `json:"phone_number"`
+	UserID      string    `json:"user_id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	User        User      `json:"user"`
+}
+
+// VendorUser represents a vendor user in the system.
+type VendorUser struct {
+	ID               string     `json:"id"`
+	BusinessName     string     `json:"business_name"`
+	BusinessAddress  string     `json:"business_address"`
+	ContactNumber    string     `json:"contact_number"`
+	UserID           string     `json:"user_id"`
+	ApprovedAt       *time.Time `json:"approved_at"`
+	SuspendedAt      *time.Time `json:"suspended_at"`
+	CreatedByAdminID string     `json:"created_by_admin_id"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	User             User       `json:"user"`
+}
+
+// NormalUser represents a normal user in the system.
+type AdminUser struct {
+	ID        string    `json:"id"`
+	FirstName string    `json:"first_name"`
+	LastName  string    `json:"last_name"`
+	UserID    string    `json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	User      User      `json:"user"`
 }
 
 type password struct {
@@ -56,33 +96,6 @@ func (p *password) Matches(plaintextPassword string) (bool, error) {
 	}
 
 	return true, nil
-}
-
-// NormalUser represents a normal user in the system.
-type NormalUser struct {
-	ID          string    `json:"id"`
-	FirstName   string    `json:"first_name"`
-	LastName    string    `json:"last_name"`
-	PhoneNumber string    `json:"phone_number"`
-	UserID      string    `json:"user_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	User        User      `json:"user"`
-}
-
-// VendorUser represents a vendor user in the system.
-type VendorUser struct {
-	ID               string     `json:"id"`
-	BusinessName     string     `json:"business_name"`
-	BusinessAddress  string     `json:"business_address"`
-	ContactNumber    string     `json:"contact_number"`
-	UserID           string     `json:"user_id"`
-	ApprovedAt       *time.Time `json:"approved_at"`
-	SuspendedAt      *time.Time `json:"suspended_at"`
-	CreatedByAdminID string     `json:"created_by_admin_id"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
-	User             User       `json:"user"`
 }
 
 type UserStorage interface {
