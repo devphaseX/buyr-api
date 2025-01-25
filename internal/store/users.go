@@ -103,6 +103,7 @@ type UserStorage interface {
 	SetUserAccountAsActivate(ctx context.Context, user *User) error
 	GetByID(ctx context.Context, userID string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	UpdatePassword(ctx context.Context, user *User, password string) error
 }
 
 // UserModel represents the database model for users.
@@ -332,5 +333,20 @@ func (s *UserModel) SetUserAccountAsActivate(ctx context.Context, user *User) er
 		&user.UpdatedAt,
 	)
 
+	return err
+}
+
+func (s *UserModel) UpdatePassword(ctx context.Context, user *User, password string) error {
+	query := `UPDATE users SET password_hash = $1 WHERE id = $2`
+
+	err := user.Password.Set(password)
+
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+	_, err = s.db.ExecContext(ctx, query, user.Password.hash, user.ID)
 	return err
 }

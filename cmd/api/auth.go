@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -435,6 +436,13 @@ type forgetPasswordForm struct {
 	Email string `json:"email"`
 }
 
+type forgetPassword2faPayload struct {
+	EmailVerify        bool
+	Email              string
+	EnableTwoFactor    bool
+	TwoVerifyConfirmed bool
+}
+
 func (app *application) forgetPassword(w http.ResponseWriter, r *http.Request) {
 	var form forgetPasswordForm
 
@@ -455,7 +463,17 @@ func (app *application) forgetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := app.cacheStore.Tokens.New(user.ID, time.Hour*4, cache.ForgetPassword, nil)
+	payload, err := json.Marshal(forgetPassword2faPayload{
+		Email:           form.Email,
+		EnableTwoFactor: user.TwoFactorAuthEnabled,
+	})
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	token, err := app.cacheStore.Tokens.New(user.ID, time.Hour*4, cache.ForgetPassword, payload)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -482,4 +500,238 @@ func (app *application) forgetPassword(w http.ResponseWriter, r *http.Request) {
 	}, asynqOpts...)
 
 	app.successResponse(w, http.StatusNoContent, nil)
+}
+
+type confirmForgetPasswordTokenForm struct {
+	Token string `json:"token" validate:"required"`
+}
+
+func (app *application) confirmForgetPasswordToken(w http.ResponseWriter, r *http.Request) {
+	var form confirmForgetPasswordTokenForm
+
+	// Parse and validate the request body
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	// Fetch the token from the cache
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPassword, form.Token)
+	if err != nil {
+		app.unauthorizedResponse(w, r, "invalid or expired token")
+		return
+	}
+
+	// Verify the token scope
+	if token.Scope != cache.ForgetPassword {
+		app.unauthorizedResponse(w, r, "invalid token scope")
+		return
+	}
+
+	// Unmarshal the payload
+	var payload forgetPassword2faPayload
+	if err := json.Unmarshal(token.Data, &payload); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Update the payload to set EmailVerify to true
+	payload.EmailVerify = true
+
+	// Marshal the updated payload
+	updatedPayload, err := json.Marshal(payload)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Update the token with the new payload
+	token.Data = updatedPayload
+	err = app.cacheStore.Tokens.Insert(r.Context(), token)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// If 2FA is enabled, return a 2FA token
+	if payload.EnableTwoFactor {
+
+		// Respond with the 2FA token
+		app.successResponse(w, http.StatusOK, envelope{
+			"message":        "Token confirmed successfully. 2FA verification required.",
+			"mfa_enabled":    true,
+			"mfa_auth_token": form.Token,
+		})
+		return
+	}
+
+	// If 2FA is not enabled, respond with success
+	app.successResponse(w, http.StatusOK, envelope{
+		"message": "Token confirmed successfully. Please reset your password.",
+	})
+}
+
+func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.Request) {
+	var form verify2FAForm
+
+	// Parse and validate the request body
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	// Fetch the 2FA token from the cache
+	mfaToken, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPassword, form.MfaToken)
+	if err != nil {
+		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
+		return
+	}
+
+	// Verify the token scope
+	if mfaToken.Scope != cache.ForgetPassword {
+		app.unauthorizedResponse(w, r, "invalid 2FA token scope")
+		return
+	}
+
+	// Unmarshal the payload
+	var payload forgetPassword2faPayload
+	if err := json.Unmarshal(mfaToken.Data, &payload); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	if !payload.EmailVerify {
+		app.unauthorizedResponse(w, r, "complete your email verification")
+		return
+
+	}
+
+	if !payload.EnableTwoFactor {
+		app.unauthorizedResponse(w, r, "two factor not enabled")
+		return
+	}
+	// Update the payload to set EmailVerify to true
+	payload.TwoVerifyConfirmed = true
+
+	// Marshal the updated payload
+	updatedPayload, err := json.Marshal(payload)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Update the token with the new payload
+	mfaToken.Data = updatedPayload
+	err = app.cacheStore.Tokens.Insert(r.Context(), mfaToken)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Fetch the user
+	user, err := app.store.Users.GetByID(r.Context(), mfaToken.UserID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Verify the 2FA code
+	if !app.totp.VerifyCode(form.MfaCode, user.AuthSecret) {
+		app.unauthorizedResponse(w, r, "invalid 2FA code")
+		return
+	}
+
+	// Respond with success
+	app.successResponse(w, http.StatusOK, envelope{
+		"message": "2FA verification successful. Please reset your password.",
+	})
+}
+
+type resetPasswordForm struct {
+	Token    string `json:"token" validate:"required"`
+	Password string `json:"password" validate:"required,min=8,max=255"`
+}
+
+func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var form resetPasswordForm
+
+	// Parse and validate the request body
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	// Fetch the token from the cache
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPassword, form.Token)
+	if err != nil {
+		app.unauthorizedResponse(w, r, "invalid or expired token")
+		return
+	}
+
+	// Verify the token scope
+	if token.Scope != cache.ForgetPassword {
+		app.unauthorizedResponse(w, r, "invalid token scope")
+		return
+	}
+
+	// Unmarshal the payload
+	var payload forgetPassword2faPayload
+	if err := json.Unmarshal(token.Data, &payload); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Verify that the email has been confirmed
+	if !payload.EmailVerify {
+		app.unauthorizedResponse(w, r, "email not verified")
+		return
+	}
+
+	if payload.EnableTwoFactor && !payload.TwoVerifyConfirmed {
+		// Verify that the two factor has been confirmed for two factor enabled account
+		app.unauthorizedResponse(w, r, "two factor not verified")
+		return
+	}
+
+	// Fetch the user by email
+	user, err := app.store.Users.GetByEmail(r.Context(), payload.Email)
+	_ = user
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// // Update the user's password
+	err = app.store.Users.UpdatePassword(r.Context(), user, form.Password)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Delete the token after successful password reset
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ForgetPassword, form.Token)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Respond with success
+	app.successResponse(w, http.StatusOK, envelope{
+		"message": "Password reset successfully.",
+	})
 }
