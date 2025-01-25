@@ -85,6 +85,13 @@ type VendorUser struct {
 	User             User       `json:"user"`
 }
 
+type UserStorage interface {
+	CreateNormalUser(context.Context, *NormalUser) error
+	SetUserAccountAsActivate(ctx context.Context, user *User) error
+	GetByID(ctx context.Context, userID string) (*User, error)
+	GetByEmail(ctx context.Context, email string) (*User, error)
+}
+
 // UserModel represents the database model for users.
 type UserModel struct {
 	db *sql.DB
@@ -104,9 +111,9 @@ func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	`
 
 	id := db.GenerateULID()
-	args := []any{id, user.Email, pq.Array(user.Password.hash), user.Role}
+	args := []any{id, user.Email, user.Password.hash, user.Role}
 
-	ctx, cancel := context.WithTimeout(ctx, QueryDurationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
 	err := tx.QueryRowContext(ctx, query, args...).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
@@ -135,7 +142,7 @@ func createNormalUser(ctx context.Context, tx *sql.Tx, user *NormalUser) error {
 	id := db.GenerateULID()
 	args := []any{id, user.FirstName, user.LastName, user.PhoneNumber, user.User.ID}
 
-	ctx, cancel := context.WithTimeout(ctx, QueryDurationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
 	err := tx.QueryRowContext(ctx, query, args...).Scan(&user.ID, &user.UserID, &user.CreatedAt, &user.UpdatedAt)
@@ -157,7 +164,7 @@ func createVendorUser(ctx context.Context, tx *sql.Tx, user *VendorUser) error {
 	id := db.GenerateULID()
 	args := []any{id, user.BusinessName, user.BusinessAddress, user.ContactNumber, user.User.ID, user.CreatedByAdminID}
 
-	ctx, cancel := context.WithTimeout(ctx, QueryDurationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
 	err := tx.QueryRowContext(ctx, query, args...).Scan(&user.ID, &user.UserID, &user.CreatedAt, &user.UpdatedAt)
@@ -248,13 +255,63 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 	return user, nil
 }
 
+func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error) {
+	query := `SELECT id, email, password_hash,
+			  avatar_url, role, email_verified_at,
+			  is_active,created_at, updated_at FROM users
+			  WHERE email ilike $1
+	`
+
+	user := &User{}
+
+	var emailVerifiedAt sql.NullTime
+	var avatarURL sql.NullString
+	var isActive sql.NullBool
+
+	err := s.db.QueryRowContext(ctx, query, email).Scan(
+		&user.ID,
+		&user.Email,
+		&user.Password.hash,
+		&avatarURL,
+		&user.Role,
+		&emailVerifiedAt,
+		&isActive,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	if val, err := emailVerifiedAt.Value(); err == nil && val != nil {
+		emailVerifiedAt := val.(time.Time)
+		user.EmailVerifiedAt = &emailVerifiedAt
+	}
+
+	if val, err := avatarURL.Value(); err == nil && val != nil {
+		user.AvatarURL = val.(string)
+	}
+
+	if val, err := isActive.Value(); err == nil && val != nil {
+		user.IsActive = val.(bool)
+	}
+
+	return user, nil
+}
+
 func (s *UserModel) SetUserAccountAsActivate(ctx context.Context, user *User) error {
 	query := `UPDATE users
 			SET email_verified_at = now(), is_active = true
 			WHERE id = $1
 			RETURNING email_verified_at, updated_at`
 
-	ctx, cancel := context.WithTimeout(ctx, QueryDurationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 
 	defer cancel()
 

@@ -56,6 +56,17 @@ func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Reque
 	app.errorResponse(w, http.StatusInternalServerError, message)
 }
 
+func (app *application) invalidCredentialsResponse(w http.ResponseWriter, r *http.Request) {
+	// Log the failed sign-in attempt
+	app.logger.Infow("failed sign-in attempt", "method", r.Method, "path", r.URL.Path)
+
+	// Define the error message
+	message := "invalid credentials: incorrect email or password"
+
+	// Send the error response
+	app.errorResponse(w, http.StatusUnauthorized, message)
+}
+
 func (app *application) errorResponse(w http.ResponseWriter, status int, message any) {
 	// Create a structured response envelope
 	env := envelope{

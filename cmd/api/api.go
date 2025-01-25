@@ -37,6 +37,15 @@ type config struct {
 	db         dbConfig
 	redisCfg   redisConfig
 	mailConfig mailConfig
+	authConfig AuthConfig
+}
+
+type AuthConfig struct {
+	AccessSecretKey  string
+	RefreshSecretKey string
+	AccessTokenTTL   time.Duration
+	RefreshTokenTTL  time.Duration
+	RememberMeTTL    time.Duration
 }
 
 type mailConfig struct {
@@ -81,6 +90,7 @@ func (app *application) routes() http.Handler {
 	r.Route("/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerNormalUser)
+			r.Post("/sign-in", app.signIn)
 		})
 
 		r.Route("/users", func(r chi.Router) {

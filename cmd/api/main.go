@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/devphaseX/buyr-api.git/internal/auth"
 	"github.com/devphaseX/buyr-api.git/internal/db"
 	"github.com/devphaseX/buyr-api.git/internal/env"
 	"github.com/devphaseX/buyr-api.git/internal/mailer"
@@ -24,6 +25,13 @@ func main() {
 		clientURL: env.GetString("CLIENT_URL", "http://localhost:3000"),
 		addr:      env.GetString("ADDR", ":8080"),
 		env:       env.GetString("ENV", "development"),
+		authConfig: AuthConfig{
+			AccessSecretKey:  env.GetString("ACCESS_SECRET_KEY", ""),
+			RefreshSecretKey: env.GetString("REFRESH_SECRET_KEY", ""),
+			AccessTokenTTL:   env.GetDuration("ACCESS_TOKEN_TTL", time.Minute*5),
+			RefreshTokenTTL:  env.GetDuration("REFRESH_TOKEN_TLL", time.Hour*1),
+			RememberMeTTL:    env.GetDuration("REMEMBER_ME_TTL", time.Hour*24*30),
+		},
 		db: dbConfig{
 			dsn:          env.GetString("DB_ADDR", "postgres://mingle:adminpassword@localhost/mingle?sslmode=disable"),
 			maxOpenConns: env.GetInt("DB_MAX_OPEN_CONNS", 30),
@@ -74,13 +82,18 @@ func main() {
 	}
 
 	taskDistributor := worker.NewTaskDistributor(redisOpts)
+	authToken, err := auth.NewPasetoToken(cfg.authConfig.AccessSecretKey, cfg.authConfig.RefreshSecretKey)
 
+	if err != nil {
+		logger.Panic(err)
+	}
 	app := &application{
 		cfg:             cfg,
 		logger:          logger,
 		store:           store,
 		cacheStore:      cacheStore,
 		taskDistributor: taskDistributor,
+		authToken:       authToken,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -15,7 +15,7 @@ type PasetoToken struct {
 	refreshKey []byte
 }
 
-func newPasetoToken(accessSecret, refreshSecret string) (*PasetoToken, error) {
+func NewPasetoToken(accessSecret, refreshSecret string) (*PasetoToken, error) {
 	accessSecretByte, err := base64.StdEncoding.DecodeString(accessSecret)
 
 	if err != nil {
@@ -48,7 +48,7 @@ func newPasetoToken(accessSecret, refreshSecret string) (*PasetoToken, error) {
 }
 
 // GenerateAccessToken creates a PASETO token for access
-func (t *PasetoToken) GenerateAccessToken(userID int64, sessionID string, accessExpiry time.Duration) (string, error) {
+func (t *PasetoToken) GenerateAccessToken(userID string, sessionID string, accessExpiry time.Duration) (string, error) {
 	payload := NewAccessPayload(userID, sessionID, accessExpiry)
 
 	// Set token expiration

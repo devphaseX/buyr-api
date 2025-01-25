@@ -155,3 +155,95 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 
 	app.successResponse(w, http.StatusOK, nil)
 }
+
+type signInForm struct {
+	Email      string `json:"email" validate:"email"`
+	Password   string `json:"password" validate:"min=1,max=255"`
+	RememberMe bool   `json:"remember_me"`
+}
+
+func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
+	var form signInForm
+
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	user, err := app.store.Users.GetByEmail(r.Context(), form.Email)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	match, err := user.Password.Matches(form.Password)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.invalidCredentialsResponse(w, r)
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	if !match {
+		app.invalidCredentialsResponse(w, r)
+		return
+	}
+
+	var (
+		sessionExpiry     = app.cfg.authConfig.RefreshTokenTTL
+		accessTokenExpiry = app.cfg.authConfig.AccessTokenTTL
+	)
+	session := &store.Session{
+		UserID:     user.ID,
+		IP:         r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
+		Version:    1,
+		RememberMe: form.RememberMe,
+	}
+
+	if form.RememberMe {
+		sessionExpiry = app.cfg.authConfig.RememberMeTTL
+		session.MaxRenewalDuration = time.Now().AddDate(0, 6, 0).Unix() //6 months
+	}
+
+	session.ExpiresAt = time.Now().Add(sessionExpiry)
+
+	err = app.store.Sessions.Create(r.Context(), session)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	accessToken, err := app.authToken.GenerateAccessToken(user.ID, session.ID, app.cfg.authConfig.AccessTokenTTL)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	refreshToken, err := app.authToken.GenerateRefreshToken(session.ID, session.Version, sessionExpiry)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.successResponse(w, http.StatusOK, envelope{
+		"access_token":         accessToken,
+		"access_token_expiry":  time.Now().Add(accessTokenExpiry),
+		"refresh_token":        refreshToken,
+		"refresh_token_expiry": time.Now().Add(sessionExpiry),
+	})
+}

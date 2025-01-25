@@ -23,12 +23,12 @@ type AuthToken interface {
 
 // Payload for access tokens
 type AccessPayload struct {
-	UserID    int64  `json:"user_id"`
+	UserID    string `json:"user_id"`
 	SessionID string `json:"session_id"`
 	jwt.RegisteredClaims
 }
 
-func NewAccessPayload(userId int64, sessionId string, expiry time.Duration) *AccessPayload {
+func NewAccessPayload(userId string, sessionId string, expiry time.Duration) *AccessPayload {
 	return &AccessPayload{
 		UserID:    userId,
 		SessionID: sessionId,

@@ -8,24 +8,21 @@ import (
 )
 
 var (
-	QueryDurationTimeout = time.Second * 5
-	ErrRecordNotFound    = errors.New("record not found")
-	ErrDuplicateEmail    = errors.New("email already exists")
+	QueryTimeoutDuration      = time.Second * 5
+	ErrRecordNotFound         = errors.New("record not found")
+	ErrDuplicateEmail         = errors.New("email already exists")
+	ErrSessionCannotBeExtends = errors.New("session cannot be extended")
 )
 
-type UserStorage interface {
-	CreateNormalUser(context.Context, *NormalUser) error
-	SetUserAccountAsActivate(ctx context.Context, user *User) error
-	GetByID(ctx context.Context, userID string) (*User, error)
-}
-
 type Storage struct {
-	Users UserStorage
+	Users    UserStorage
+	Sessions SessionStore
 }
 
 func NewStorage(db *sql.DB) *Storage {
 	return &Storage{
-		Users: NewUserModel(db),
+		Users:    NewUserModel(db),
+		Sessions: NewSessionModel(db),
 	}
 }
 
