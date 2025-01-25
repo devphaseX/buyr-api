@@ -13,7 +13,6 @@ import (
 const TaskSendRecoverAccountEmail = "task:send_recover_account_email"
 
 type PayloadSendRecoverAccountEmail struct {
-	UserID    string `json:"user_id"`
 	Username  string `json:"username"`
 	Token     string `json:"token"`
 	Email     string `json:"email"`
@@ -58,13 +57,13 @@ func (processor *RedisTaskProcessor) ProcessTaskSendRecoverAccountEmail(ctx cont
 
 	err := processor.mailClient.Send(&mailer.MailOption{
 		To:           []string{payload.Email},
-		TemplateFile: mailer.ActivateAccountEmailTemplate,
+		TemplateFile: mailer.RecoverAccountEmailTemplate,
 	}, struct {
-		Username      string
-		ActivationURL string
+		Username string
+		ResetURL string
 	}{
-		Username:      payload.Username,
-		ActivationURL: fmt.Sprintf("%s/confirm/%s?user_id=%s", payload.ClientURL, payload.Token, payload.UserID),
+		Username: payload.Username,
+		ResetURL: fmt.Sprintf("%s/confirm/%s", payload.ClientURL, payload.Token),
 	})
 
 	if err != nil {

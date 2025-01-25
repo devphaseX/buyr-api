@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -35,7 +36,7 @@ func (m *RedisTokenModel) New(userID string, ttl time.Duration, scope string, da
 	return token, err
 }
 
-func (m *RedisTokenModel) Insert(ctx context.Context, token *Token, key ...string) error {
+func (m *RedisTokenModel) Insert(ctx context.Context, token *Token) error {
 	// Create a Redis key using the scope and the token's hash
 	redisKey := createTokenKey(token.Scope, hex.EncodeToString(token.Hash))
 
@@ -73,7 +74,7 @@ func (s *RedisTokenModel) Get(ctx context.Context, scope, tokenKey string) (*Tok
 	data, err := s.client.Get(ctx, key).Result()
 
 	if err == redis.Nil {
-		return nil, nil
+		return nil, store.ErrRecordNotFound
 	}
 
 	if err != nil {
@@ -98,6 +99,7 @@ func (m *RedisTokenModel) DeleteAllForUser(ctx context.Context, scope string, us
 		return fmt.Errorf("failed to fetch token hashes for user: %w", err)
 	}
 
+	fmt.Println(tokenHashes)
 	// Delete each token using its hashed key
 	for _, tokenHash := range tokenHashes {
 		redisKey := createTokenKey(scope, tokenHash)

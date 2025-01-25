@@ -18,7 +18,7 @@ const (
 
 type Token struct {
 	Plaintext string    `json:"-"`
-	Hash      []byte    `json:"-"`
+	Hash      []byte    `json:"hash"`
 	UserID    string    `json:"user_id"`
 	Expiry    time.Time `json:"expiry"`
 	Scope     string    `json:"scope"`
@@ -27,7 +27,7 @@ type Token struct {
 
 type TokenStore interface {
 	New(userID string, ttl time.Duration, scope string, data []byte) (*Token, error)
-	Insert(ctx context.Context, token *Token, key ...string) error
+	Insert(ctx context.Context, token *Token) error
 	Get(ctx context.Context, scope, tokenKey string) (*Token, error)
 	DeleteAllForUser(ctx context.Context, scope string, userID string) error
 }

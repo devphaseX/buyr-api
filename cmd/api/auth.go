@@ -86,7 +86,6 @@ func (app *application) registerNormalUser(w http.ResponseWriter, r *http.Reques
 
 	err = app.taskDistributor.DistributeTaskSendActivateAccountEmail(r.Context(),
 		&worker.PayloadSendActivateAcctEmail{
-			UserID:    user.User.ID,
 			Username:  fmt.Sprintf("%s %s", user.FirstName, user.LastName),
 			Email:     user.User.Email,
 			ClientURL: app.cfg.clientURL,
@@ -103,12 +102,6 @@ func (app *application) registerNormalUser(w http.ResponseWriter, r *http.Reques
 
 func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 	tokenKey := app.readStringID(r, "token")
-	userID := r.URL.Query().Get("userId")
-
-	if userID == "" {
-		app.unauthorizedResponse(w, r, "expired or invalid token")
-		return
-	}
 
 	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ScopeActivation, tokenKey)
 
@@ -148,7 +141,7 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ScopeActivation, userID)
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ScopeActivation, user.ID)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -241,7 +234,7 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err = app.cacheStore.Tokens.Insert(r.Context(), token, token.Plaintext)
+		err = app.cacheStore.Tokens.Insert(r.Context(), token)
 		if err != nil {
 			app.serverErrorResponse(w, r, err)
 			return
@@ -493,13 +486,14 @@ func (app *application) forgetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = app.taskDistributor.DistributeTaskSendRecoverAccountEmail(r.Context(), &worker.PayloadSendRecoverAccountEmail{
-		UserID:    user.ID,
 		Email:     user.Email,
 		ClientURL: app.cfg.clientURL,
 		Token:     token.Plaintext,
 	}, asynqOpts...)
 
-	app.successResponse(w, http.StatusNoContent, nil)
+	app.successResponse(w, http.StatusNoContent, envelope{
+		"message": "A reset link has being sent to your email",
+	})
 }
 
 type confirmForgetPasswordTokenForm struct {
@@ -539,7 +533,6 @@ func (app *application) confirmForgetPasswordToken(w http.ResponseWriter, r *htt
 		app.serverErrorResponse(w, r, err)
 		return
 	}
-
 	// Update the payload to set EmailVerify to true
 	payload.EmailVerify = true
 
@@ -549,6 +542,8 @@ func (app *application) confirmForgetPasswordToken(w http.ResponseWriter, r *htt
 		app.serverErrorResponse(w, r, err)
 		return
 	}
+
+	token.Plaintext = form.Token
 
 	// Update the token with the new payload
 	token.Data = updatedPayload
@@ -678,6 +673,7 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch the token from the cache
 	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPassword, form.Token)
+
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired token")
 		return
@@ -724,7 +720,7 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete the token after successful password reset
-	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ForgetPassword, form.Token)
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ForgetPassword, user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

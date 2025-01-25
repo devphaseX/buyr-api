@@ -13,7 +13,6 @@ import (
 const TaskSendActivateAccountEmail = "task:send_activate_account_email"
 
 type PayloadSendActivateAcctEmail struct {
-	UserID    string `json:"user_id"`
 	Username  string `json:"username"`
 	Token     string `json:"token"`
 	Email     string `json:"email"`
@@ -64,7 +63,7 @@ func (processor *RedisTaskProcessor) ProcessTaskSendActivateAcctEmail(ctx contex
 		ActivationURL string
 	}{
 		Username:      payload.Username,
-		ActivationURL: fmt.Sprintf("%s/confirm/%s?user_id=%s", payload.ClientURL, payload.Token, payload.UserID),
+		ActivationURL: fmt.Sprintf("%s/confirm/%s", payload.ClientURL, payload.Token),
 	})
 
 	if err != nil {
