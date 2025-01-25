@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/store"
@@ -246,4 +247,79 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		"refresh_token":        refreshToken,
 		"refresh_token_expiry": time.Now().Add(sessionExpiry),
 	})
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
+	var form refreshRequest
+	// Try to get the refresh token from the cookie
+	refreshTokenCookie, err := r.Cookie("sid")
+	if err == nil && refreshTokenCookie != nil && strings.TrimSpace(refreshTokenCookie.Value) != "" {
+		form.RefreshToken = refreshTokenCookie.Value
+	} else {
+		// If the cookie is not available, try to get the refresh token from the JSON body
+		if err := app.readJSON(w, r, &form); err != nil {
+			app.badRequestResponse(w, r, errors.New("missing refresh token"))
+			return
+		}
+
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, errors.New("missing refresh token"))
+		return
+	}
+
+	// Validate the refresh token
+	claims, err := app.authToken.ValidateRefreshToken(form.RefreshToken)
+	// fmt.Printf("claim: %+v", claims)
+
+	if err != nil {
+		app.unauthorizedResponse(w, r, "invalid refresh token")
+		return
+	}
+	// Validate the session
+	session, user, canExtend, err := app.store.Sessions.ValidateSession(r.Context(), claims.SessionID, claims.Version)
+	if err != nil || session == nil {
+		app.unauthorizedResponse(w, r, "invalid session")
+		return
+	}
+
+	// Generate a new access token
+	accessToken, err := app.authToken.GenerateAccessToken(user.ID, session.ID, app.cfg.authConfig.AccessTokenTTL)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	var (
+		newRefreshToken string
+		rememberPeriod  = app.cfg.authConfig.RefreshTokenTTL
+	)
+
+	if session.RememberMe {
+		rememberPeriod = app.cfg.authConfig.RememberMeTTL
+	}
+
+	if canExtend {
+		newRefreshToken, err = app.store.Sessions.ExtendSessionAndGenerateRefreshToken(r.Context(), session, app.authToken, rememberPeriod)
+		if err != nil {
+			app.serverErrorResponse(w, r, fmt.Errorf("failed to extend session: %v", err))
+			return
+		}
+	}
+	// Return the new access token
+	response := envelope{
+		"access_token":            accessToken,
+		"access_token_expires_in": time.Now().Add(app.cfg.authConfig.AccessTokenTTL),
+	}
+	if newRefreshToken != "" {
+		response["refresh_token"] = newRefreshToken
+		response["refresh_token_expires_in"] = time.Now().Add(rememberPeriod)
+	}
+
+	app.successResponse(w, http.StatusOK, response)
 }

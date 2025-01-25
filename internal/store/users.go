@@ -239,17 +239,16 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 		}
 	}
 
-	if val, err := emailVerifiedAt.Value(); err == nil && val != nil {
-		emailVerifiedAt := val.(time.Time)
-		user.EmailVerifiedAt = &emailVerifiedAt
+	if emailVerifiedAt.Valid {
+		user.EmailVerifiedAt = &emailVerifiedAt.Time
 	}
 
-	if val, err := avatarURL.Value(); err == nil && val != nil {
-		user.AvatarURL = val.(string)
+	if avatarURL.Valid {
+		user.AvatarURL = avatarURL.String
 	}
 
-	if val, err := isActive.Value(); err == nil && val != nil {
-		user.IsActive = val.(bool)
+	if isActive.Valid {
+		user.IsActive = isActive.Bool
 	}
 
 	return user, nil

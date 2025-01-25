@@ -88,6 +88,7 @@ func (s *SessionModel) ValidateSession(ctx context.Context, sessionID string, ve
 	}
 	// Check if the session is expired
 	now := time.Now()
+
 	if now.After(session.ExpiresAt) {
 		_ = s.InvalidateSession(ctx, sessionID)
 		return nil, nil, false, nil
@@ -128,7 +129,7 @@ func (s *SessionModel) GetSessionByID(ctx context.Context, sessionID string) (*S
 	query := `
 		SELECT
 		 s.id, s.user_id, s.user_agent,
-		 s.ip, s.expires_at, s.last_used,
+		 s.ip, s.expires_at, s.last_used, s.version,
 		 s.created_at, s.remember_me, s.max_renewal_duration,
 		 u.id, u.email,
 		 u.avatar_url, u.role,
@@ -156,6 +157,7 @@ func (s *SessionModel) GetSessionByID(ctx context.Context, sessionID string) (*S
 		&session.IP,
 		&session.ExpiresAt,
 		&session.LastUsed,
+		&session.Version,
 		&session.CreatedAt,
 		&session.RememberMe,
 		&maxRenewalDuration,

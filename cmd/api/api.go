@@ -91,6 +91,7 @@ func (app *application) routes() http.Handler {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerNormalUser)
 			r.Post("/sign-in", app.signIn)
+			r.Post("/refresh", app.refreshToken)
 		})
 
 		r.Route("/users", func(r chi.Router) {
