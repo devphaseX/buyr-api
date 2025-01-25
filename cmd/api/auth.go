@@ -241,12 +241,12 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.successResponse(w, http.StatusOK, envelope{
-		"access_token":         accessToken,
-		"access_token_expiry":  time.Now().Add(accessTokenExpiry),
-		"refresh_token":        refreshToken,
-		"refresh_token_expiry": time.Now().Add(sessionExpiry),
-	})
+	app.setAuthCookiesAndRespond(w,
+		accessToken,
+		accessTokenExpiry,
+		refreshToken,
+		sessionExpiry,
+	)
 }
 
 type refreshRequest struct {
@@ -311,15 +311,12 @@ func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Return the new access token
-	response := envelope{
-		"access_token":            accessToken,
-		"access_token_expires_in": time.Now().Add(app.cfg.authConfig.AccessTokenTTL),
-	}
-	if newRefreshToken != "" {
-		response["refresh_token"] = newRefreshToken
-		response["refresh_token_expires_in"] = time.Now().Add(rememberPeriod)
-	}
 
-	app.successResponse(w, http.StatusOK, response)
+	app.setAuthCookiesAndRespond(
+		w,
+		accessToken,
+		app.cfg.authConfig.AccessTokenTTL,
+		newRefreshToken,
+		rememberPeriod,
+	)
 }

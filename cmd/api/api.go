@@ -41,11 +41,13 @@ type config struct {
 }
 
 type AuthConfig struct {
-	AccessSecretKey  string
-	RefreshSecretKey string
-	AccessTokenTTL   time.Duration
-	RefreshTokenTTL  time.Duration
-	RememberMeTTL    time.Duration
+	AccessSecretKey   string
+	RefreshSecretKey  string
+	AccessTokenTTL    time.Duration
+	RefreshTokenTTL   time.Duration
+	RememberMeTTL     time.Duration
+	AccesssCookieName string
+	RefreshCookiName  string
 }
 
 type mailConfig struct {

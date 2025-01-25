@@ -26,11 +26,13 @@ func main() {
 		addr:      env.GetString("ADDR", ":8080"),
 		env:       env.GetString("ENV", "development"),
 		authConfig: AuthConfig{
-			AccessSecretKey:  env.GetString("ACCESS_SECRET_KEY", ""),
-			RefreshSecretKey: env.GetString("REFRESH_SECRET_KEY", ""),
-			AccessTokenTTL:   env.GetDuration("ACCESS_TOKEN_TTL", time.Minute*5),
-			RefreshTokenTTL:  env.GetDuration("REFRESH_TOKEN_TLL", time.Hour*1),
-			RememberMeTTL:    env.GetDuration("REMEMBER_ME_TTL", time.Hour*24*30),
+			AccessSecretKey:   env.GetString("ACCESS_SECRET_KEY", ""),
+			RefreshSecretKey:  env.GetString("REFRESH_SECRET_KEY", ""),
+			AccessTokenTTL:    env.GetDuration("ACCESS_TOKEN_TTL", time.Minute*5),
+			RefreshTokenTTL:   env.GetDuration("REFRESH_TOKEN_TLL", time.Hour*1),
+			RememberMeTTL:     env.GetDuration("REMEMBER_ME_TTL", time.Hour*24*30),
+			AccesssCookieName: env.GetString("ACCESS_COOKIE_NAME", ""),
+			RefreshCookiName:  env.GetString("REFRESH_COOKIE_NAME", ""),
 		},
 		db: dbConfig{
 			dsn:          env.GetString("DB_ADDR", "postgres://mingle:adminpassword@localhost/mingle?sslmode=disable"),
