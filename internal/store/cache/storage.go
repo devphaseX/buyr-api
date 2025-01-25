@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
@@ -14,17 +15,19 @@ const (
 )
 
 type Token struct {
-	Plaintext string    `json:"token"`
-	Hash      []byte    `json:"-"`
-	UserID    string    `json:"-"`
+	Plaintext string    `json:"-"`
+	Hash      []byte    `json:"hash"`
+	UserID    string    `json:"user_id"`
 	Expiry    time.Time `json:"expiry"`
-	Scope     string    `json:"-"`
+	Scope     string    `json:"scope"`
+	Data      []byte    `json:"data"`
 }
 
 type TokenStore interface {
 	New(userID string, ttl time.Duration, scope string) (*Token, error)
-	Insert(token *Token) error
-	DeleteAllForUser(scope string, userID string) error
+	Insert(ctx context.Context, token *Token) error
+	Get(ctx context.Context, scope, userID, tokenKey string) (*Token, error)
+	DeleteAllForUser(ctx context.Context, scope string, userID string) error
 }
 
 type Storage struct {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -82,6 +83,8 @@ func main() {
 		taskDistributor: taskDistributor,
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	go app.background(func() {
 		mailClient := mailer.NewMailTrapClient(
 			cfg.mailConfig.mailTrap.fromEmail,
@@ -93,7 +96,7 @@ func main() {
 			cfg.mailConfig.mailTrap.isSandbox,
 			logger,
 		)
-		app.runTaskProcessor(redisOpts, store, cacheStore, mailClient)
+		app.runTaskProcessor(redisOpts, ctx, store, cacheStore, mailClient)
 	})
 	err = app.serve()
 
@@ -102,10 +105,15 @@ func main() {
 	}
 }
 
-func (app *application) runTaskProcessor(redisOpt asynq.RedisClientOpt, store *store.Storage, cacheStore *cache.Storage, mailClient mailer.Client) {
+func (app *application) runTaskProcessor(redisOpt asynq.RedisClientOpt, ctx context.Context, store *store.Storage, cacheStore *cache.Storage, mailClient mailer.Client) {
 	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, cacheStore, mailClient)
 
 	app.logger.Info("start task processor")
+
+	go func() {
+		<-ctx.Done()
+		taskProcessor.Close()
+	}()
 
 	err := taskProcessor.Start()
 

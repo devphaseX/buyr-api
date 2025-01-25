@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     avatar_url text,
     role varchar(50),
     email_verified_at timestamp,
-    is_active boolean,
+    is_active boolean default true,
     created_at timestamp
     with
         time zone default now (),

@@ -197,3 +197,71 @@ func (s *UserModel) CreateVendorUser(ctx context.Context, user *VendorUser) erro
 		return nil
 	})
 }
+
+func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
+	query := `SELECT id, email, password_hash,
+			  avatar_url, role, email_verified_at,
+			  is_active,created_at, updated_at FROM users
+			  WHERE id = $1
+	`
+
+	user := &User{}
+
+	var emailVerifiedAt sql.NullTime
+	var avatarURL sql.NullString
+	var isActive sql.NullBool
+
+	err := s.db.QueryRowContext(ctx, query, userID).Scan(
+		&user.ID,
+		&user.Email,
+		&user.Password.hash,
+		&avatarURL,
+		&user.Role,
+		&emailVerifiedAt,
+		&isActive,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	if val, err := emailVerifiedAt.Value(); err == nil && val != nil {
+		emailVerifiedAt := val.(time.Time)
+		user.EmailVerifiedAt = &emailVerifiedAt
+	}
+
+	if val, err := avatarURL.Value(); err == nil && val != nil {
+		user.AvatarURL = val.(string)
+	}
+
+	if val, err := isActive.Value(); err == nil && val != nil {
+		user.IsActive = val.(bool)
+	}
+
+	return user, nil
+}
+
+func (s *UserModel) SetUserAccountAsActivate(ctx context.Context, user *User) error {
+	query := `UPDATE users
+			SET email_verified_at = now(), is_active = true
+			WHERE id = $1
+			RETURNING email_verified_at, updated_at`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryDurationTimeout)
+
+	defer cancel()
+
+	err := s.db.QueryRowContext(ctx, query, user.ID).Scan(
+		&user.EmailVerifiedAt,
+		&user.UpdatedAt,
+	)
+
+	return err
+}

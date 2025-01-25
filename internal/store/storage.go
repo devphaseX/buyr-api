@@ -15,6 +15,8 @@ var (
 
 type UserStorage interface {
 	CreateNormalUser(context.Context, *NormalUser) error
+	SetUserAccountAsActivate(ctx context.Context, user *User) error
+	GetByID(ctx context.Context, userID string) (*User, error)
 }
 
 type Storage struct {

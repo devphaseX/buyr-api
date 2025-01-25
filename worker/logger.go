@@ -18,7 +18,11 @@ func NewLogger() asynq.Logger {
 }
 
 func (l *Logger) Print(level zapcore.Level, args ...any) {
-	l.zap.Log(level, args...)
+	if len(args)%2 == 1 {
+		l.zap.Log(level, args...)
+		return
+	}
+	l.zap.Logw(level, "worker log", args...)
 }
 
 func (l *Logger) Debug(args ...interface{}) {

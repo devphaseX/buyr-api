@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/mailer"
 	"github.com/hibiken/asynq"
@@ -12,6 +13,7 @@ import (
 const TaskSendActivateAccountEmail = "task:send_activate_account_email"
 
 type PayloadSendActivateAcctEmail struct {
+	UserID    string `json:"user_id"`
 	Username  string `json:"username"`
 	Token     string `json:"token"`
 	Email     string `json:"email"`
@@ -27,7 +29,11 @@ func (rt *RedisTaskDistributor) DistributeTaskSendActivateAccountEmail(ctx conte
 
 	activateAccountEmailTask := asynq.NewTask(TaskSendActivateAccountEmail, jsonPayload, opts...)
 
-	taskInfo, err := rt.client.EnqueueContext(ctx, activateAccountEmailTask)
+	taskInfo, err := rt.client.EnqueueContext(ctx,
+		activateAccountEmailTask,
+		asynq.Unique(time.Second*5),
+		asynq.TaskID(payload.Token),
+	)
 
 	if err != nil {
 		return err
@@ -58,7 +64,7 @@ func (processor *RedisTaskProcessor) ProcessTaskSendActivateAcctEmail(ctx contex
 		ActivationURL string
 	}{
 		Username:      payload.Username,
-		ActivationURL: fmt.Sprintf("%s/confirm/%s", payload.ClientURL, payload.Token),
+		ActivationURL: fmt.Sprintf("%s/confirm/%s?user_id=%s", payload.ClientURL, payload.Token, payload.UserID),
 	})
 
 	if err != nil {
