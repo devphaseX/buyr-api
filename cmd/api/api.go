@@ -32,14 +32,15 @@ type application struct {
 }
 
 type config struct {
-	addr       string
-	env        string
-	apiURL     string
-	clientURL  string
-	db         dbConfig
-	redisCfg   redisConfig
-	mailConfig mailConfig
-	authConfig AuthConfig
+	addr          string
+	env           string
+	apiURL        string
+	clientURL     string
+	db            dbConfig
+	redisCfg      redisConfig
+	mailConfig    mailConfig
+	authConfig    AuthConfig
+	encryptConfig encryptConfig
 }
 
 type AuthConfig struct {
@@ -51,6 +52,10 @@ type AuthConfig struct {
 	AccesssCookieName string
 	RefreshCookiName  string
 	totpIssuerName    string
+}
+
+type encryptConfig struct {
+	masterSecretKey string
 }
 
 type mailConfig struct {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/devphaseX/buyr-api.git/internal/encrypt"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 )
 
@@ -11,10 +12,16 @@ func (app *application) setup2fa(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromCtx(r)
 
 	// Validate the user role
-	if user.Role != store.UserRole && user.Role != store.AdminRole && user.Role != store.VendorRole {
+	if user.Role != store.AdminRole && user.Role != store.VendorRole {
 		app.forbiddenResponse(w, r, "2FA is not available for this user role")
 		return
 	}
+
+	if user.TwoFactorAuthEnabled {
+		app.forbiddenResponse(w, r, "2fa setup already complete")
+		return
+	}
+
 	// Flatten the user to get role-specific details
 	flattenUser, err := app.store.Users.FlattenUser(r.Context(), user)
 	if err != nil {
@@ -75,10 +82,16 @@ func (app *application) verify2faSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := app.store.Users.EnableTwoFactorAuth(r.Context(), user.ID, form.Secret)
+	encryptedSecret, err := encrypt.EncryptSecret(form.Secret, app.cfg.encryptConfig.masterSecretKey)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.store.Users.EnableTwoFactorAuth(r.Context(), user.ID, encryptedSecret)
 
 	if err != nil {
-		app.badRequestResponse(w, r, err)
+		app.serverErrorResponse(w, r, err)
 		return
 	}
 

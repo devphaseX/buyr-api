@@ -63,6 +63,9 @@ func main() {
 				password:        env.GetString("MAIL_TRAP_PASSWORD", ""),
 			},
 		},
+		encryptConfig: encryptConfig{
+			masterSecretKey: env.GetString("MASTER_SECRET_KEY", ""),
+		},
 	}
 
 	logger := zap.Must(zap.NewProduction()).Sugar()

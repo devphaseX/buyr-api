@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devphaseX/buyr-api.git/internal/encrypt"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/store/cache"
 	"github.com/devphaseX/buyr-api.git/worker"
@@ -308,8 +309,15 @@ func (app *application) verify2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	secret, err := encrypt.DecryptSecret(user.AuthSecret, app.cfg.encryptConfig.masterSecretKey)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	// Verify the 2FA code (e.g., using a TOTP library)
-	if !app.totp.VerifyCode(user.AuthSecret, form.MfaCode) {
+	if !app.totp.VerifyCode(secret, form.MfaCode) {
 		app.unauthorizedResponse(w, r, "invalid 2FA code")
 		return
 	}
@@ -639,8 +647,14 @@ func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Verify the 2FA code
-	if !app.totp.VerifyCode(form.MfaCode, user.AuthSecret) {
+	secret, err := encrypt.DecryptSecret(user.AuthSecret, app.cfg.encryptConfig.masterSecretKey)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Verify the 2FA code (e.g., using a TOTP library)
+	if !app.totp.VerifyCode(secret, form.MfaCode) {
 		app.unauthorizedResponse(w, r, "invalid 2FA code")
 		return
 	}

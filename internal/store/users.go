@@ -533,7 +533,7 @@ func (s *UserModel) GetNormalUserByID(ctx context.Context, userID string) (*Norm
 			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
 		FROM normal_users n
 		JOIN users u ON n.user_id = u.id
-		WHERE n.id = $1
+		WHERE u.id = $1
 	`
 
 	normalUser := &NormalUser{}
@@ -602,7 +602,7 @@ func (s *UserModel) GetAdminUserByID(ctx context.Context, userID string) (*Admin
 			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
 		FROM admin_users a
 		JOIN users u ON a.user_id = u.id
-		WHERE a.id = $1
+		WHERE u.id = $1
 	`
 
 	adminUser := &AdminUser{}
@@ -671,7 +671,7 @@ func (s *UserModel) GetVendorUserByID(ctx context.Context, userID string) (*Vend
 			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
 		FROM vendor_users v
 		JOIN users u ON v.user_id = u.id
-		WHERE v.id = $1
+		WHERE u.id = $1
 	`
 
 	vendorUser := &VendorUser{}
