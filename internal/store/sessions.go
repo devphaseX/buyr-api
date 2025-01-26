@@ -19,6 +19,7 @@ type Session struct {
 	ExpiresAt          time.Time  `json:"expires_at"`
 	LastUsed           *time.Time `json:"last_used"`
 	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 	RememberMe         bool       `json:"remember_me"`          // Whether the session should be extended
 	MaxRenewalDuration int64      `json:"max_renewal_duration"` // Maximum duration for session renewal (in seconds)
 }
@@ -100,13 +101,18 @@ func (s *SessionModel) ValidateSession(ctx context.Context, sessionID string, ve
 	// Check if the session can be extended (Remember Me is enabled)
 	canExtend := false
 	if session.RememberMe {
-		// Calculate the maximum allowed expiration time
-		maxRenewalTime := time.Unix(session.MaxRenewalDuration, 0)
+		// Calculate the midpoint of the session's lifetime
+		sessionDuration := session.ExpiresAt.Sub(session.UpdatedAt)
+		midpoint := session.UpdatedAt.Add(sessionDuration / 2)
 
-		// If the current expiration time is before the maximum allowed, the session can be extended
-		if session.ExpiresAt.Before(maxRenewalTime) {
+		// If the current time is past the midpoint, the session can be extended
+		if now.After(midpoint) {
 			canExtend = true
-		} else {
+		}
+
+		// Check if the session has exceeded the maximum renewal duration
+		maxRenewalTime := time.Unix(session.MaxRenewalDuration, 0)
+		if session.ExpiresAt.After(maxRenewalTime) {
 			// The session has exceeded the maximum renewal duration; force the user to log in again
 			_ = s.InvalidateSession(ctx, sessionID)
 			return nil, nil, false, nil
@@ -133,7 +139,7 @@ func (s *SessionModel) GetSessionByID(ctx context.Context, sessionID string) (*S
 		SELECT
 		 s.id, s.user_id, s.user_agent,
 		 s.ip, s.expires_at, s.last_used, s.version,
-		 s.created_at, s.remember_me, s.max_renewal_duration,
+		 s.created_at,s.updated_at, s.remember_me, s.max_renewal_duration,
 		 u.id, u.email,
 		 u.avatar_url, u.role,
 	 	 u.email_verified_at, u.is_active,
@@ -162,6 +168,7 @@ func (s *SessionModel) GetSessionByID(ctx context.Context, sessionID string) (*S
 		&session.LastUsed,
 		&session.Version,
 		&session.CreatedAt,
+		&session.UpdatedAt,
 		&session.RememberMe,
 		&maxRenewalDuration,
 		&user.ID,
@@ -207,7 +214,7 @@ func (s *SessionModel) GetSessionsByUserID(
 	var totalRecords int
 
 	query := `
-		SELECT count(*) OVER(), id, user_id, user_agent, ip, expires_at, last_used, created_at
+		SELECT count(*) OVER(), id, user_id, user_agent, ip, expires_at, remember_me, last_used, created_at,updated_at
 		FROM sessions
 	`
 	if !isAdmin {
@@ -240,8 +247,10 @@ func (s *SessionModel) GetSessionsByUserID(
 			&session.UserAgent,
 			&session.IP,
 			&session.ExpiresAt,
+			&session.RememberMe,
 			&session.LastUsed,
 			&session.CreatedAt,
+			&session.UpdatedAt,
 		)
 		if err != nil {
 			return nil, Metadata{}, err
