@@ -56,6 +56,23 @@ func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Reque
 	app.errorResponse(w, http.StatusInternalServerError, message)
 }
 
+func (app *application) forbiddenResponse(w http.ResponseWriter, r *http.Request, details ...string) {
+	// Log the forbidden error
+	app.logger.Errorw("forbidden access attempt",
+		"method", r.Method,
+		"path", r.URL.Path,
+	)
+
+	// Determine the message to use
+	message := "you do not have permission to access this resource"
+	if len(details) > 0 && details[0] != "" {
+		message = details[0]
+	}
+
+	// Send the forbidden response
+	app.errorResponse(w, http.StatusForbidden, message)
+}
+
 func (app *application) invalidCredentialsResponse(w http.ResponseWriter, r *http.Request) {
 	// Log the failed sign-in attempt
 	app.logger.Infow("failed sign-in attempt", "method", r.Method, "path", r.URL.Path)

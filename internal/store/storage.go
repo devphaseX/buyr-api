@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -12,6 +13,7 @@ var (
 	ErrRecordNotFound         = errors.New("record not found")
 	ErrDuplicateEmail         = errors.New("email already exists")
 	ErrSessionCannotBeExtends = errors.New("session cannot be extended")
+	ErrUnknownUserRole        = fmt.Errorf("unknown user role")
 )
 
 type Storage struct {

@@ -1,20 +1,47 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+
+	"github.com/devphaseX/buyr-api.git/internal/store"
 )
 
 func (app *application) setup2fa(w http.ResponseWriter, r *http.Request) {
-	_ = getUserFromCtx(r)
+	user := getUserFromCtx(r)
 
-	var accountName string = "test"
-	secret, qr, err := app.totp.GenerateSecret(app.cfg.authConfig.totpIssuerName, accountName, 256)
-
+	// Validate the user role
+	if user.Role != store.UserRole && user.Role != store.AdminRole && user.Role != store.VendorRole {
+		app.forbiddenResponse(w, r, "2FA is not available for this user role")
+		return
+	}
+	// Flatten the user to get role-specific details
+	flattenUser, err := app.store.Users.FlattenUser(r.Context(), user)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		app.serverErrorResponse(w, r, fmt.Errorf("failed to flatten user: %w", err))
 		return
 	}
 
+	// Determine the user's name based on their role
+	var userName string
+	switch flattenUser.Role {
+	case store.UserRole, store.AdminRole:
+		userName = fmt.Sprintf("%s %s", flattenUser.FirstName, flattenUser.LastName)
+	case store.VendorRole:
+		userName = flattenUser.BusinessName
+	default:
+		app.serverErrorResponse(w, r, fmt.Errorf("invalid user role: %s", flattenUser.Role))
+		return
+	}
+
+	// Generate the TOTP secret and QR code
+	secret, qr, err := app.totp.GenerateSecret(app.cfg.authConfig.totpIssuerName, userName, 256)
+	if err != nil {
+		app.serverErrorResponse(w, r, fmt.Errorf("failed to generate TOTP secret: %w", err))
+		return
+	}
+
+	// Return the secret and QR code in the response
 	app.successResponse(w, http.StatusOK, envelope{
 		"secret": secret,
 		"qr":     qr,

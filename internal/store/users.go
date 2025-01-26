@@ -12,13 +12,21 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type Role string
+
+var (
+	UserRole   Role = "user"
+	VendorRole Role = "vendor"
+	AdminRole  Role = "admin"
+)
+
 // User represents a user in the system.
 type User struct {
 	ID                   string     `json:"id"`
 	Email                string     `json:"email"`
 	Password             password   `json:"-"`
 	AvatarURL            string     `json:"avatar_url"`
-	Role                 string     `json:"role"`
+	Role                 Role       `json:"role"`
 	EmailVerifiedAt      *time.Time `json:"email_verified_at"`
 	AuthSecret           string     `json:"auth_secret"`
 	TwoFactorAuthEnabled bool       `json:"two_factor_auth_enabled"`
@@ -65,6 +73,116 @@ type AdminUser struct {
 	User      User      `json:"user"`
 }
 
+// FlattenedUser combines all user types into a single struct
+type FlattenedUser struct {
+	// Base User fields
+	ID                   string     `json:"id"`
+	Email                string     `json:"email"`
+	AvatarURL            string     `json:"avatar_url"`
+	Role                 Role       `json:"role"`
+	EmailVerifiedAt      *time.Time `json:"email_verified_at"`
+	AuthSecret           string     `json:"auth_secret"`
+	TwoFactorAuthEnabled bool       `json:"two_factor_auth_enabled"`
+	IsActive             bool       `json:"is_active"`
+	UserCreatedAt        time.Time  `json:"user_created_at"`
+	UserUpdatedAt        time.Time  `json:"user_updated_at"`
+
+	// User Type Specific Fields
+	UserType       string `json:"user_type"`
+	OriginalUserID string `json:"original_user_id"`
+
+	// Normal User fields
+	FirstName   string `json:"first_name,omitempty"`
+	LastName    string `json:"last_name,omitempty"`
+	PhoneNumber string `json:"phone_number,omitempty"`
+
+	// Vendor User fields
+	BusinessName     string     `json:"business_name,omitempty"`
+	BusinessAddress  string     `json:"business_address,omitempty"`
+	ContactNumber    string     `json:"contact_number,omitempty"`
+	ApprovedAt       *time.Time `json:"approved_at,omitempty"`
+	SuspendedAt      *time.Time `json:"suspended_at,omitempty"`
+	CreatedByAdminID string     `json:"created_by_admin_id,omitempty"`
+}
+
+// Marshal functions for each user type
+func MarshalNormalUser(normalUser NormalUser) *FlattenedUser {
+	return &FlattenedUser{
+		// Base User fields
+		ID:                   normalUser.User.ID,
+		Email:                normalUser.User.Email,
+		AvatarURL:            normalUser.User.AvatarURL,
+		Role:                 normalUser.User.Role,
+		EmailVerifiedAt:      normalUser.User.EmailVerifiedAt,
+		AuthSecret:           normalUser.User.AuthSecret,
+		TwoFactorAuthEnabled: normalUser.User.TwoFactorAuthEnabled,
+		IsActive:             normalUser.User.IsActive,
+		UserCreatedAt:        normalUser.User.CreatedAt,
+		UserUpdatedAt:        normalUser.User.UpdatedAt,
+
+		// User Type fields
+		UserType:       "normal",
+		OriginalUserID: normalUser.ID,
+
+		// Normal User specific fields
+		FirstName:   normalUser.FirstName,
+		LastName:    normalUser.LastName,
+		PhoneNumber: normalUser.PhoneNumber,
+	}
+}
+
+func MarshalVendorUser(vendorUser VendorUser) *FlattenedUser {
+	return &FlattenedUser{
+		// Base User fields
+		ID:                   vendorUser.User.ID,
+		Email:                vendorUser.User.Email,
+		AvatarURL:            vendorUser.User.AvatarURL,
+		Role:                 vendorUser.User.Role,
+		EmailVerifiedAt:      vendorUser.User.EmailVerifiedAt,
+		AuthSecret:           vendorUser.User.AuthSecret,
+		TwoFactorAuthEnabled: vendorUser.User.TwoFactorAuthEnabled,
+		IsActive:             vendorUser.User.IsActive,
+		UserCreatedAt:        vendorUser.User.CreatedAt,
+		UserUpdatedAt:        vendorUser.User.UpdatedAt,
+
+		// User Type fields
+		UserType:       "vendor",
+		OriginalUserID: vendorUser.ID,
+
+		// Vendor User specific fields
+		BusinessName:     vendorUser.BusinessName,
+		BusinessAddress:  vendorUser.BusinessAddress,
+		ContactNumber:    vendorUser.ContactNumber,
+		ApprovedAt:       vendorUser.ApprovedAt,
+		SuspendedAt:      vendorUser.SuspendedAt,
+		CreatedByAdminID: vendorUser.CreatedByAdminID,
+	}
+}
+
+func MarshalAdminUser(adminUser AdminUser) *FlattenedUser {
+	return &FlattenedUser{
+		// Base User fields
+		ID:                   adminUser.User.ID,
+		Email:                adminUser.User.Email,
+		AvatarURL:            adminUser.User.AvatarURL,
+		Role:                 adminUser.User.Role,
+		EmailVerifiedAt:      adminUser.User.EmailVerifiedAt,
+		AuthSecret:           adminUser.User.AuthSecret,
+		TwoFactorAuthEnabled: adminUser.User.TwoFactorAuthEnabled,
+		IsActive:             adminUser.User.IsActive,
+		UserCreatedAt:        adminUser.User.CreatedAt,
+		UserUpdatedAt:        adminUser.User.UpdatedAt,
+
+		// User Type fields
+		UserType:       "admin",
+		OriginalUserID: adminUser.ID,
+
+		// Admin User specific fields
+		FirstName: adminUser.FirstName,
+		LastName:  adminUser.LastName,
+	}
+}
+
 type password struct {
 	plaintext *string
 	hash      []byte
@@ -106,6 +224,10 @@ type UserStorage interface {
 	UpdatePassword(ctx context.Context, user *User, password string) error
 	EnableTwoFactorAuth(ctx context.Context, userID, authSecret string) error
 	DisableTwoFactorAuth(ctx context.Context, userID string) error
+	GetVendorUserByID(ctx context.Context, userID string) (*VendorUser, error)
+	GetAdminUserByID(ctx context.Context, userID string) (*AdminUser, error)
+	GetNormalUserByID(ctx context.Context, userID string) (*NormalUser, error)
+	FlattenUser(ctx context.Context, user *User) (*FlattenedUser, error)
 }
 
 // UserModel represents the database model for users.
@@ -402,4 +524,256 @@ func (s *UserModel) DisableTwoFactorAuth(ctx context.Context, userID string) err
 	}
 
 	return nil
+}
+
+func (s *UserModel) GetNormalUserByID(ctx context.Context, userID string) (*NormalUser, error) {
+	query := `
+		SELECT n.id, n.first_name, n.last_name, n.phone_number, n.user_id, n.created_at, n.updated_at,
+			   u.id, u.email, u.password_hash, u.avatar_url, u.role, u.email_verified_at,
+			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
+		FROM normal_users n
+		JOIN users u ON n.user_id = u.id
+		WHERE n.id = $1
+	`
+
+	normalUser := &NormalUser{}
+	user := &User{}
+
+	var emailVerifiedAt sql.NullTime
+	var avatarURL sql.NullString
+	var isActive sql.NullBool
+	var authSecret sql.NullString
+
+	err := s.db.QueryRowContext(ctx, query, userID).Scan(
+		&normalUser.ID,
+		&normalUser.FirstName,
+		&normalUser.LastName,
+		&normalUser.PhoneNumber,
+		&normalUser.UserID,
+		&normalUser.CreatedAt,
+		&normalUser.UpdatedAt,
+		&user.ID,
+		&user.Email,
+		&user.Password.hash,
+		&avatarURL,
+		&user.Role,
+		&emailVerifiedAt,
+		&isActive,
+		&user.TwoFactorAuthEnabled,
+		&authSecret,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	if emailVerifiedAt.Valid {
+		user.EmailVerifiedAt = &emailVerifiedAt.Time
+	}
+
+	if avatarURL.Valid {
+		user.AvatarURL = avatarURL.String
+	}
+
+	if isActive.Valid {
+		user.IsActive = isActive.Bool
+	}
+
+	if authSecret.Valid {
+		user.AuthSecret = authSecret.String
+	}
+
+	normalUser.User = *user
+
+	return normalUser, nil
+}
+
+func (s *UserModel) GetAdminUserByID(ctx context.Context, userID string) (*AdminUser, error) {
+	query := `
+		SELECT a.id, a.first_name, a.last_name, a.user_id, a.created_at, a.updated_at,
+			   u.id, u.email, u.password_hash, u.avatar_url, u.role, u.email_verified_at,
+			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
+		FROM admin_users a
+		JOIN users u ON a.user_id = u.id
+		WHERE a.id = $1
+	`
+
+	adminUser := &AdminUser{}
+	user := &User{}
+
+	var emailVerifiedAt sql.NullTime
+	var avatarURL sql.NullString
+	var isActive sql.NullBool
+	var authSecret sql.NullString
+
+	err := s.db.QueryRowContext(ctx, query, userID).Scan(
+		&adminUser.ID,
+		&adminUser.FirstName,
+		&adminUser.LastName,
+		&adminUser.UserID,
+		&adminUser.CreatedAt,
+		&adminUser.UpdatedAt,
+		&user.ID,
+		&user.Email,
+		&user.Password.hash,
+		&avatarURL,
+		&user.Role,
+		&emailVerifiedAt,
+		&isActive,
+		&user.TwoFactorAuthEnabled,
+		&authSecret,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	if emailVerifiedAt.Valid {
+		user.EmailVerifiedAt = &emailVerifiedAt.Time
+	}
+
+	if avatarURL.Valid {
+		user.AvatarURL = avatarURL.String
+	}
+
+	if isActive.Valid {
+		user.IsActive = isActive.Bool
+	}
+
+	if authSecret.Valid {
+		user.AuthSecret = authSecret.String
+	}
+
+	adminUser.User = *user
+
+	return adminUser, nil
+}
+
+func (s *UserModel) GetVendorUserByID(ctx context.Context, userID string) (*VendorUser, error) {
+	query := `
+		SELECT v.id, v.business_name, v.business_address, v.contact_number, v.user_id, v.created_by_admin_id,
+			   v.approved_at, v.suspended_at, v.created_at, v.updated_at,
+			   u.id, u.email, u.password_hash, u.avatar_url, u.role, u.email_verified_at,
+			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
+		FROM vendor_users v
+		JOIN users u ON v.user_id = u.id
+		WHERE v.id = $1
+	`
+
+	vendorUser := &VendorUser{}
+	user := &User{}
+
+	var emailVerifiedAt sql.NullTime
+	var avatarURL sql.NullString
+	var isActive sql.NullBool
+	var authSecret sql.NullString
+	var approvedAt sql.NullTime
+	var suspendedAt sql.NullTime
+
+	err := s.db.QueryRowContext(ctx, query, userID).Scan(
+		&vendorUser.ID,
+		&vendorUser.BusinessName,
+		&vendorUser.BusinessAddress,
+		&vendorUser.ContactNumber,
+		&vendorUser.UserID,
+		&vendorUser.CreatedByAdminID,
+		&approvedAt,
+		&suspendedAt,
+		&vendorUser.CreatedAt,
+		&vendorUser.UpdatedAt,
+		&user.ID,
+		&user.Email,
+		&user.Password.hash,
+		&avatarURL,
+		&user.Role,
+		&emailVerifiedAt,
+		&isActive,
+		&user.TwoFactorAuthEnabled,
+		&authSecret,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	if emailVerifiedAt.Valid {
+		user.EmailVerifiedAt = &emailVerifiedAt.Time
+	}
+
+	if avatarURL.Valid {
+		user.AvatarURL = avatarURL.String
+	}
+
+	if isActive.Valid {
+		user.IsActive = isActive.Bool
+	}
+
+	if authSecret.Valid {
+		user.AuthSecret = authSecret.String
+	}
+
+	if approvedAt.Valid {
+		vendorUser.ApprovedAt = &approvedAt.Time
+	}
+
+	if suspendedAt.Valid {
+		vendorUser.SuspendedAt = &suspendedAt.Time
+	}
+
+	vendorUser.User = *user
+
+	return vendorUser, nil
+}
+
+func (u *UserModel) FlattenUser(ctx context.Context, user *User) (*FlattenedUser, error) {
+	var flattenUser *FlattenedUser
+
+	switch user.Role {
+	case UserRole:
+		normalUser, err := u.GetNormalUserByID(ctx, user.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch normal user: %w", err)
+		}
+		flattenUser = MarshalNormalUser(*normalUser)
+
+	case VendorRole:
+		vendorUser, err := u.GetVendorUserByID(ctx, user.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch vendor user: %w", err)
+		}
+		flattenUser = MarshalVendorUser(*vendorUser)
+
+	case AdminRole:
+		adminUser, err := u.GetAdminUserByID(ctx, user.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch admin user: %w", err)
+		}
+		flattenUser = MarshalAdminUser(*adminUser)
+
+	default:
+		return nil, ErrUnknownUserRole
+	}
+
+	return flattenUser, nil
 }
