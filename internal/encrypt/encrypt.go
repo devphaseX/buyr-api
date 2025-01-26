@@ -97,3 +97,40 @@ func DecryptSecret(encryptedSecret, passphrase string) (string, error) {
 
 	return string(decrypted), nil
 }
+
+// EncryptRecoveryCodes encrypts a group of recovery codes using AES-GCM and a passphrase.
+func EncryptRecoveryCodes(codes []string, passphrase string) ([]string, error) {
+	size := len(codes)
+	encryptedCodes := make([]string, size)
+
+	for i := 0; i < size; i++ {
+		secret, err := EncryptSecret(passphrase, codes[i])
+
+		if err != nil {
+			return nil, err
+		}
+
+		encryptedCodes = append(encryptedCodes, secret)
+	}
+
+	return encryptedCodes, nil
+}
+
+// DecryptRecoveryCodes decrypts a group of recovery codes using AES-GCM and a passphrase.
+func DecryptRecoveryCodes(encryptedData []string, passphrase string) ([]string, error) {
+	size := len(encryptedData)
+
+	recoveryCodes := make([]string, size)
+
+	for i := 0; i < size; i++ {
+		code, err := DecryptSecret(passphrase, encryptedData[i])
+
+		if err != nil {
+			return nil, err
+		}
+
+		recoveryCodes = append(recoveryCodes, code)
+	}
+
+	return recoveryCodes, nil
+}

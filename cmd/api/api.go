@@ -127,6 +127,7 @@ func (app *application) routes() http.Handler {
 			r.Use(app.requireAuthenicatedUser)
 			r.Get("/setup", app.setup2fa)
 			r.Post("/verify", app.verify2faSetup)
+			r.Post("/recovery-codes", app.viewRecoveryCodes)
 		})
 	})
 	return r

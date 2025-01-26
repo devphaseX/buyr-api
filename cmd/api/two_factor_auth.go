@@ -88,7 +88,19 @@ func (app *application) verify2faSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = app.store.Users.EnableTwoFactorAuth(r.Context(), user.ID, encryptedSecret)
+	recoveryCodes, err := encrypt.GenerateRecoveryCodes(10, 10)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	encryptedCodes, err := encrypt.EncryptRecoveryCodes(recoveryCodes, app.cfg.encryptConfig.masterSecretKey)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.store.Users.EnableTwoFactorAuth(r.Context(), user.ID, encryptedSecret, encryptedCodes)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -98,4 +110,42 @@ func (app *application) verify2faSetup(w http.ResponseWriter, r *http.Request) {
 	app.successResponse(w, http.StatusOK, envelope{
 		"message": "mfa setup completed",
 	})
+}
+
+type viewRecoveryCodesForm struct {
+	Password string `json:"password" validate:"required"`
+}
+
+func (app *application) viewRecoveryCodes(w http.ResponseWriter, r *http.Request) {
+	var (
+		form viewRecoveryCodesForm
+		user = getUserFromCtx(r)
+	)
+
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if match := app.withPasswordAccess(r, form.Password); !match {
+		app.forbiddenResponse(w, r, "password not a match")
+		return
+	}
+
+	recoveryCodes, err := encrypt.DecryptRecoveryCodes(user.RecoveryCodes, app.cfg.encryptConfig.masterSecretKey)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.successResponse(w, http.StatusOK, envelope{
+		"recovery_codes": recoveryCodes,
+	})
+
 }

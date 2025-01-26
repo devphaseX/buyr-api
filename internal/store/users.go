@@ -30,6 +30,7 @@ type User struct {
 	AvatarURL            string     `json:"avatar_url"`
 	Role                 Role       `json:"role"`
 	EmailVerifiedAt      *time.Time `json:"email_verified_at"`
+	RecoveryCodes        []string   `json:"recovery_codes"`
 	AuthSecret           string     `json:"auth_secret"`
 	TwoFactorAuthEnabled bool       `json:"two_factor_auth_enabled"`
 	IsActive             bool       `json:"is_active"`
@@ -223,7 +224,7 @@ type UserStorage interface {
 	GetByID(ctx context.Context, userID string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	UpdatePassword(ctx context.Context, user *User, password string) error
-	EnableTwoFactorAuth(ctx context.Context, userID, authSecret string) error
+	EnableTwoFactorAuth(ctx context.Context, userID, authSecret string, recoveryCodes []string) error
 	DisableTwoFactorAuth(ctx context.Context, userID string) error
 	GetVendorUserByID(ctx context.Context, userID string) (*VendorUser, error)
 	GetAdminUserByID(ctx context.Context, userID string) (*AdminUser, error)
@@ -490,7 +491,7 @@ func (s *UserModel) UpdatePassword(ctx context.Context, user *User, password str
 }
 
 // EnableTwoFactorAuth enables 2FA for a user.
-func (s *UserModel) EnableTwoFactorAuth(ctx context.Context, userID, authSecret string) error {
+func (s *UserModel) EnableTwoFactorAuth(ctx context.Context, userID, authSecret string, recoveryCodes []string) error {
 	query := `
 		UPDATE users
 		SET auth_secret = $1, two_factor_auth_enabled = TRUE

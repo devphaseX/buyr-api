@@ -75,3 +75,15 @@ func (app *application) setAuthCookiesAndRespond(
 	// Send the success response
 	app.successResponse(w, http.StatusOK, response)
 }
+
+func (app *application) withPasswordAccess(r *http.Request, password string) bool {
+	user := getUserFromCtx(r)
+
+	match, err := user.Password.Matches(password)
+
+	if err != nil {
+		app.logger.Panic(err)
+	}
+
+	return match
+}

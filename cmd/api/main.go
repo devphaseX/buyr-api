@@ -126,7 +126,13 @@ func main() {
 	}
 }
 
-func (app *application) runTaskProcessor(redisOpt asynq.RedisClientOpt, ctx context.Context, store *store.Storage, cacheStore *cache.Storage, mailClient mailer.Client) {
+func (app *application) runTaskProcessor(
+	redisOpt asynq.RedisClientOpt,
+	ctx context.Context,
+	store *store.Storage,
+	cacheStore *cache.Storage,
+	mailClient mailer.Client,
+) {
 	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, cacheStore, mailClient)
 
 	app.logger.Info("start task processor")
