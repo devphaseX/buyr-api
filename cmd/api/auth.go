@@ -205,7 +205,7 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		token, err := app.cacheStore.Tokens.New(
 			user.ID,
 			time.Hour*4,
-			cache.Require2faConfirmation,
+			cache.Login2fa,
 			payload,
 		)
 
@@ -253,14 +253,14 @@ func (app *application) verifyLogin2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch the token from the cache
-	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Require2faConfirmation, form.MfaToken)
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Login2fa, form.MfaToken)
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
 		return
 	}
 
 	// Verify the token scope
-	if token.Scope != cache.Require2faConfirmation {
+	if token.Scope != cache.Login2fa {
 		app.unauthorizedResponse(w, r, "invalid 2FA token")
 		return
 	}
@@ -271,7 +271,7 @@ func (app *application) verifyLogin2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch the user
-	user, err := app.store.Users.GetByID(r.Context(), token.UserID)
+	user, err := app.getUser(r.Context(), token.UserID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -322,14 +322,14 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 	}
 
 	// Fetch the token from the cache
-	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Require2faConfirmation, form.MfaToken)
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Login2fa, form.MfaToken)
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
 		return
 	}
 
 	// Verify the token scope
-	if token.Scope != cache.Require2faConfirmation {
+	if token.Scope != cache.Login2fa {
 		app.unauthorizedResponse(w, r, "invalid 2FA token")
 		return
 	}
@@ -340,7 +340,7 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 	}
 
 	// Fetch the user
-	user, err := app.store.Users.GetByID(r.Context(), token.UserID)
+	user, err := app.getUser(r.Context(), token.UserID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -373,7 +373,7 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 		return
 	}
 	// Delete the specific token after successful verification
-	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.Require2faConfirmation, user.ID); err != nil {
+	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.Login2fa, user.ID); err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
@@ -738,7 +738,7 @@ func (app *application) verifyForgetPasswordRecoveryCode(w http.ResponseWriter, 
 	}
 
 	// Fetch the user
-	user, err := app.store.Users.GetByID(r.Context(), mfaToken.UserID)
+	user, err := app.getUser(r.Context(), mfaToken.UserID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

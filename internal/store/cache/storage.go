@@ -7,13 +7,18 @@ import (
 	"encoding/base32"
 	"time"
 
+	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/redis/go-redis/v9"
 )
 
 const (
-	ScopeActivation        = "activation"
-	ForgetPassword         = "forget_password"
-	Require2faConfirmation = "require_2fa_confirmation"
+	ScopeActivation = "activation"
+	ForgetPassword  = "forget_password"
+	Login2fa        = "login_2fa"
+)
+
+var (
+	UserExpTime = time.Minute
 )
 
 type Token struct {
@@ -32,13 +37,20 @@ type TokenStore interface {
 	DeleteAllForUser(ctx context.Context, scope string, userID string) error
 }
 
+type UserStore interface {
+	Get(ctx context.Context, userID string) (*store.User, error)
+	Set(ctx context.Context, user *store.User) error
+}
+
 type Storage struct {
 	Tokens TokenStore
+	Users  UserStore
 }
 
 func NewRedisStorage(rdb *redis.Client) *Storage {
 	return &Storage{
 		Tokens: NewRedisTokenModel(rdb),
+		Users:  NewRedisUserModel(rdb),
 	}
 }
 

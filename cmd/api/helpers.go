@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -136,4 +139,38 @@ func (app *application) createUserSessionAndSetCookies(w http.ResponseWriter, r 
 		refreshToken,
 		sessionExpiry,
 	)
+}
+
+func (app *application) getUser(ctx context.Context, userID string) (*store.User, error) {
+	var (
+		user *store.User
+		err  error
+	)
+
+	if app.cfg.redisCfg.enabled {
+		user, err = app.cacheStore.Users.Get(ctx, userID)
+
+		if !(err == nil || errors.Is(err, store.ErrRecordNotFound)) {
+			app.logger.Errorf("Error fetching user from cache: %v", err)
+			return nil, err
+		}
+
+		app.logger.Infow("cache hit", "key", "user", "id", userID)
+		return user, nil
+	}
+
+	user, err = app.store.Users.GetByID(ctx, userID)
+
+	if err != nil {
+		return nil, fmt.Errorf("error fetching user from database: %w", err)
+	}
+
+	app.logger.Infof("fetched user %v from the database", userID)
+	err = app.cacheStore.Users.Set(ctx, user)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
