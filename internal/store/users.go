@@ -20,6 +20,8 @@ var (
 	AdminRole  Role = "admin"
 )
 
+var AnonymousUser = &User{}
+
 // User represents a user in the system.
 type User struct {
 	ID                   string     `json:"id"`
@@ -33,6 +35,10 @@ type User struct {
 	IsActive             bool       `json:"is_active"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
+}
+
+func (u *User) IsAnonymous() bool {
+	return u == AnonymousUser
 }
 
 // NormalUser represents a normal user in the system.
@@ -81,14 +87,12 @@ type FlattenedUser struct {
 	AvatarURL            string     `json:"avatar_url"`
 	Role                 Role       `json:"role"`
 	EmailVerifiedAt      *time.Time `json:"email_verified_at"`
-	AuthSecret           string     `json:"auth_secret"`
+	AuthSecret           string     `json:"-"`
 	TwoFactorAuthEnabled bool       `json:"two_factor_auth_enabled"`
 	IsActive             bool       `json:"is_active"`
 	UserCreatedAt        time.Time  `json:"user_created_at"`
 	UserUpdatedAt        time.Time  `json:"user_updated_at"`
 
-	// User Type Specific Fields
-	UserType       string `json:"user_type"`
 	OriginalUserID string `json:"original_user_id"`
 
 	// Normal User fields
@@ -121,7 +125,6 @@ func MarshalNormalUser(normalUser NormalUser) *FlattenedUser {
 		UserUpdatedAt:        normalUser.User.UpdatedAt,
 
 		// User Type fields
-		UserType:       "normal",
 		OriginalUserID: normalUser.ID,
 
 		// Normal User specific fields
@@ -146,7 +149,6 @@ func MarshalVendorUser(vendorUser VendorUser) *FlattenedUser {
 		UserUpdatedAt:        vendorUser.User.UpdatedAt,
 
 		// User Type fields
-		UserType:       "vendor",
 		OriginalUserID: vendorUser.ID,
 
 		// Vendor User specific fields
@@ -174,7 +176,6 @@ func MarshalAdminUser(adminUser AdminUser) *FlattenedUser {
 		UserUpdatedAt:        adminUser.User.UpdatedAt,
 
 		// User Type fields
-		UserType:       "admin",
 		OriginalUserID: adminUser.ID,
 
 		// Admin User specific fields

@@ -19,7 +19,9 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 		// Extract the token from the Authorization header or cookie
 		token := extractToken(r, app)
 		if token == "" {
-			app.unauthorizedResponse(w, r, "invalid or missing authentication token")
+			// Add the user to the request context
+			ctx := context.WithValue(r.Context(), authContextKey, store.AnonymousUser)
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
@@ -72,4 +74,17 @@ func getUserFromCtx(r *http.Request) *store.User {
 		panic("user context middleware not ran or functioning properly")
 	}
 	return user
+}
+
+func (app *application) requireAuthenicatedUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := getUserFromCtx(r)
+
+		if user.IsAnonymous() {
+			app.unauthorizedResponse(w, r, "you must be authenticated to access this resource")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

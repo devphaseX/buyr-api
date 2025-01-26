@@ -158,6 +158,10 @@ type signInForm struct {
 	RememberMe bool   `json:"remember_me"`
 }
 
+type signIn2faPayload struct {
+	RememberMe bool
+}
+
 func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 	var form signInForm
 
@@ -196,38 +200,13 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		sessionExpiry     = app.cfg.authConfig.RefreshTokenTTL
-		accessTokenExpiry = app.cfg.authConfig.AccessTokenTTL
-	)
-	session := &store.Session{
-		UserID:     user.ID,
-		IP:         r.RemoteAddr,
-		UserAgent:  r.UserAgent(),
-		Version:    1,
-		RememberMe: form.RememberMe,
-	}
-
-	if form.RememberMe {
-		sessionExpiry = app.cfg.authConfig.RememberMeTTL
-		session.MaxRenewalDuration = time.Now().AddDate(0, 6, 0).Unix() //6 months
-	}
-
-	session.ExpiresAt = time.Now().Add(sessionExpiry)
-
-	err = app.store.Sessions.Create(r.Context(), session)
-
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
 	if user.TwoFactorAuthEnabled {
+		payload, _ := json.Marshal(signIn2faPayload{RememberMe: form.RememberMe})
 		token, err := app.cacheStore.Tokens.New(
 			user.ID,
 			time.Hour*4,
 			cache.Require2faConfirmation,
-			nil,
+			payload,
 		)
 
 		if err != nil {
@@ -245,6 +224,32 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 			"mfa_enabled":    true,
 			"mfa_auth_token": token.Plaintext,
 		})
+		return
+	}
+
+	var (
+		sessionExpiry     = app.cfg.authConfig.RefreshTokenTTL
+		accessTokenExpiry = app.cfg.authConfig.AccessTokenTTL
+	)
+	session := &store.Session{
+		UserID:     user.ID,
+		IP:         r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
+		Version:    1,
+		ExpiresAt:  time.Now().Add(sessionExpiry),
+		RememberMe: form.RememberMe,
+	}
+
+	if form.RememberMe {
+		sessionExpiry = app.cfg.authConfig.RememberMeTTL
+		session.ExpiresAt = time.Now().Add(sessionExpiry)
+		session.MaxRenewalDuration = time.Now().AddDate(0, 6, 0).Unix() //6 months
+	}
+
+	err = app.store.Sessions.Create(r.Context(), session)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
 		return
 	}
 
@@ -276,7 +281,10 @@ type verify2FAForm struct {
 }
 
 func (app *application) verify2FA(w http.ResponseWriter, r *http.Request) {
-	var form verify2FAForm
+	var (
+		form             verify2FAForm
+		signin2faPayload *signIn2faPayload
+	)
 
 	// Parse and validate the request body
 	if err := app.readJSON(w, r, &form); err != nil {
@@ -299,6 +307,11 @@ func (app *application) verify2FA(w http.ResponseWriter, r *http.Request) {
 	// Verify the token scope
 	if token.Scope != cache.Require2faConfirmation {
 		app.unauthorizedResponse(w, r, "invalid 2FA token")
+		return
+	}
+
+	if err := json.Unmarshal(token.Data, &signin2faPayload); err != nil {
+		app.serverErrorResponse(w, r, err)
 		return
 	}
 
@@ -330,12 +343,20 @@ func (app *application) verify2FA(w http.ResponseWriter, r *http.Request) {
 
 	// Create a new session
 	sessionExpiry := app.cfg.authConfig.RefreshTokenTTL
+
 	session := &store.Session{
-		UserID:    user.ID,
-		IP:        r.RemoteAddr,
-		UserAgent: r.UserAgent(),
-		Version:   1,
-		ExpiresAt: time.Now().Add(sessionExpiry),
+		UserID:     user.ID,
+		IP:         r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
+		Version:    1,
+		ExpiresAt:  time.Now().Add(sessionExpiry),
+		RememberMe: signin2faPayload.RememberMe,
+	}
+
+	if signin2faPayload.RememberMe {
+		sessionExpiry = app.cfg.authConfig.RememberMeTTL
+		session.ExpiresAt = time.Now().Add(sessionExpiry)
+		session.MaxRenewalDuration = time.Now().AddDate(0, 6, 0).Unix()
 	}
 
 	// Save the session

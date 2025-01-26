@@ -97,6 +97,8 @@ func (app *application) routes() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
+	r.Use(app.AuthMiddleware)
+
 	r.Route("/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerNormalUser)
@@ -112,10 +114,17 @@ func (app *application) routes() http.Handler {
 
 		r.Route("/users", func(r chi.Router) {
 			r.Patch("/activate/{token}", app.activateUser)
+
+			r.Group(func(r chi.Router) {
+				r.Use(app.requireAuthenicatedUser)
+				r.Get("/current", app.getCurrentUser)
+
+			})
+
 		})
 
 		r.Route("/mfa", func(r chi.Router) {
-			r.Use(app.AuthMiddleware)
+			r.Use(app.requireAuthenicatedUser)
 			r.Get("/setup", app.setup2fa)
 			r.Post("/verify", app.verify2faSetup)
 		})
