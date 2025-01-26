@@ -516,7 +516,7 @@ func (s *UserModel) EnableTwoFactorAuth(ctx context.Context, userID, authSecret 
 func (s *UserModel) DisableTwoFactorAuth(ctx context.Context, userID string) error {
 	query := `
 		UPDATE users
-		SET auth_secret = NULL, two_factor_auth_enabled = FALSE
+		SET auth_secret = NULL, two_factor_auth_enabled = FALSE, recovery_codes = null
 		WHERE id = $1
 	`
 

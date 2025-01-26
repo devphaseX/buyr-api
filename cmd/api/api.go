@@ -103,11 +103,13 @@ func (app *application) routes() http.Handler {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerNormalUser)
 			r.Post("/sign-in", app.signIn)
-			r.Post("/sign-in/2fa", app.verify2FA)
+			r.Post("/sign-in/2fa", app.verifyLogin2FA)
+			r.Post("/sign-in/recovery-code", app.verifyLogin2faRecoveryCode)
 			r.Post("/refresh", app.refreshToken)
 			r.Post("/forget-password", app.forgetPassword)
 			r.Post("/reset-password/verify-email", app.confirmForgetPasswordToken)
 			r.Post("/reset-password/2fa", app.verifyForgetPassword2fa)
+			r.Post("/reset-password/recovery-code", app.verifyForgetPasswordRecoveryCode)
 			r.Post("/reset-password/change", app.resetPassword)
 
 		})

@@ -227,52 +227,7 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		sessionExpiry     = app.cfg.authConfig.RefreshTokenTTL
-		accessTokenExpiry = app.cfg.authConfig.AccessTokenTTL
-	)
-	session := &store.Session{
-		UserID:     user.ID,
-		IP:         r.RemoteAddr,
-		UserAgent:  r.UserAgent(),
-		Version:    1,
-		ExpiresAt:  time.Now().Add(sessionExpiry),
-		RememberMe: form.RememberMe,
-	}
-
-	if form.RememberMe {
-		sessionExpiry = app.cfg.authConfig.RememberMeTTL
-		session.ExpiresAt = time.Now().Add(sessionExpiry)
-		session.MaxRenewalDuration = time.Now().AddDate(0, 6, 0).Unix() //6 months
-	}
-
-	err = app.store.Sessions.Create(r.Context(), session)
-
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
-	accessToken, err := app.authToken.GenerateAccessToken(user.ID, session.ID, app.cfg.authConfig.AccessTokenTTL)
-
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
-	refreshToken, err := app.authToken.GenerateRefreshToken(session.ID, session.Version, sessionExpiry)
-
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
-	app.setAuthCookiesAndRespond(w,
-		accessToken,
-		accessTokenExpiry,
-		refreshToken,
-		sessionExpiry,
-	)
+	app.createUserSessionAndSetCookies(w, r, user, form.RememberMe)
 }
 
 type verify2FAForm struct {
@@ -280,7 +235,7 @@ type verify2FAForm struct {
 	MfaCode  string `json:"mfa_code" validate:"required,min=6,max=6"` // Assuming 6-digit codes
 }
 
-func (app *application) verify2FA(w http.ResponseWriter, r *http.Request) {
+func (app *application) verifyLogin2FA(w http.ResponseWriter, r *http.Request) {
 	var (
 		form             verify2FAForm
 		signin2faPayload *signIn2faPayload
@@ -341,45 +296,90 @@ func (app *application) verify2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a new session
-	sessionExpiry := app.cfg.authConfig.RefreshTokenTTL
+	app.createUserSessionAndSetCookies(w, r, user, signin2faPayload.RememberMe)
+}
 
-	session := &store.Session{
-		UserID:     user.ID,
-		IP:         r.RemoteAddr,
-		UserAgent:  r.UserAgent(),
-		Version:    1,
-		ExpiresAt:  time.Now().Add(sessionExpiry),
-		RememberMe: signin2faPayload.RememberMe,
+type verifyLogin2faRecoveryCodeForm struct {
+	MfaToken     string `json:"mfa_token" validate:"required"`
+	RecoveryCode string `json:"recovery_code" validate:"required,min=10,max=10"` // Assuming 6-digit codes
+}
+
+func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *http.Request) {
+	var (
+		form             verifyLogin2faRecoveryCodeForm
+		signin2faPayload *signIn2faPayload
+	)
+
+	// Parse and validate the request body
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
 	}
 
-	if signin2faPayload.RememberMe {
-		sessionExpiry = app.cfg.authConfig.RememberMeTTL
-		session.ExpiresAt = time.Now().Add(sessionExpiry)
-		session.MaxRenewalDuration = time.Now().AddDate(0, 6, 0).Unix()
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
 	}
 
-	// Save the session
-	if err := app.store.Sessions.Create(r.Context(), session); err != nil {
+	// Fetch the token from the cache
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Require2faConfirmation, form.MfaToken)
+	if err != nil {
+		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
+		return
+	}
+
+	// Verify the token scope
+	if token.Scope != cache.Require2faConfirmation {
+		app.unauthorizedResponse(w, r, "invalid 2FA token")
+		return
+	}
+
+	if err := json.Unmarshal(token.Data, &signin2faPayload); err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Generate access and refresh tokens
-	accessToken, err := app.authToken.GenerateAccessToken(user.ID, session.ID, app.cfg.authConfig.AccessTokenTTL)
+	// Fetch the user
+	user, err := app.store.Users.GetByID(r.Context(), token.UserID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	refreshToken, err := app.authToken.GenerateRefreshToken(session.ID, session.Version, sessionExpiry)
+	// Decrypt recovery codes
+	recoveryCodes, err := encrypt.DecryptRecoveryCodes(user.RecoveryCodes, app.cfg.encryptConfig.masterSecretKey)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Set cookies and respond
-	app.setAuthCookiesAndRespond(w, accessToken, app.cfg.authConfig.AccessTokenTTL, refreshToken, sessionExpiry)
+	// Verify the recovery code
+	validRecoveryCode := false
+	for _, code := range recoveryCodes {
+		if code == form.RecoveryCode {
+			validRecoveryCode = true
+			break
+		}
+	}
+
+	if !validRecoveryCode {
+		app.unauthorizedResponse(w, r, "invalid recovery code")
+		return
+	}
+
+	err = app.store.Users.DisableTwoFactorAuth(r.Context(), user.ID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	// Delete the specific token after successful verification
+	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.Require2faConfirmation, user.ID); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Create user session and set cookies
+	app.createUserSessionAndSetCookies(w, r, user, signin2faPayload.RememberMe)
 }
 
 type refreshRequest struct {
@@ -643,6 +643,26 @@ func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.R
 		app.unauthorizedResponse(w, r, "two factor not enabled")
 		return
 	}
+
+	// Fetch the user
+	user, err := app.store.Users.GetByID(r.Context(), mfaToken.UserID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	secret, err := encrypt.DecryptSecret(user.AuthSecret, app.cfg.encryptConfig.masterSecretKey)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Verify the 2FA code (e.g., using a TOTP library)
+	if !app.totp.VerifyCode(secret, form.MfaCode) {
+		app.unauthorizedResponse(w, r, "invalid 2FA code")
+		return
+	}
+
 	// Update the payload to set EmailVerify to true
 	payload.TwoVerifyConfirmed = true
 
@@ -661,6 +681,62 @@ func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Respond with success
+	app.successResponse(w, http.StatusOK, envelope{
+		"message": "2FA verification successful. Please reset your password.",
+	})
+}
+
+type verifyForgetPasswordRecoveryCodeForm struct {
+	MfaToken     string `json:"mfa_token" validate:"required"`
+	RecoveryCode string `json:"recovery_code" validate:"required,min=10,max=10"` // Assuming 6-digit codes
+}
+
+func (app *application) verifyForgetPasswordRecoveryCode(w http.ResponseWriter, r *http.Request) {
+	var form verifyForgetPasswordRecoveryCodeForm
+
+	// Parse and validate the request body
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	// Fetch the 2FA token from the cache
+	mfaToken, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPassword, form.MfaToken)
+	if err != nil {
+		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
+		return
+	}
+
+	// Verify the token scope
+	if mfaToken.Scope != cache.ForgetPassword {
+		app.unauthorizedResponse(w, r, "invalid 2FA token scope")
+		return
+	}
+
+	// Unmarshal the payload
+	var payload forgetPassword2faPayload
+	if err := json.Unmarshal(mfaToken.Data, &payload); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	if !payload.EmailVerify {
+		app.unauthorizedResponse(w, r, "complete your email verification")
+		return
+
+	}
+
+	if !payload.EnableTwoFactor {
+		app.unauthorizedResponse(w, r, "two factor not enabled")
+		return
+	}
+
 	// Fetch the user
 	user, err := app.store.Users.GetByID(r.Context(), mfaToken.UserID)
 	if err != nil {
@@ -668,15 +744,48 @@ func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	secret, err := encrypt.DecryptSecret(user.AuthSecret, app.cfg.encryptConfig.masterSecretKey)
+	// Decrypt recovery codes
+	recoveryCodes, err := encrypt.DecryptRecoveryCodes(user.RecoveryCodes, app.cfg.encryptConfig.masterSecretKey)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Verify the 2FA code (e.g., using a TOTP library)
-	if !app.totp.VerifyCode(secret, form.MfaCode) {
-		app.unauthorizedResponse(w, r, "invalid 2FA code")
+	// Verify the recovery code
+	validRecoveryCode := false
+	for _, code := range recoveryCodes {
+		if code == form.RecoveryCode {
+			validRecoveryCode = true
+			break
+		}
+	}
+
+	if !validRecoveryCode {
+		app.unauthorizedResponse(w, r, "invalid recovery code")
+		return
+	}
+
+	// Update the payload to set EmailVerify to true
+	payload.TwoVerifyConfirmed = true
+
+	// Marshal the updated payload
+	updatedPayload, err := json.Marshal(payload)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Update the token with the new payload
+	mfaToken.Data = updatedPayload
+	err = app.cacheStore.Tokens.Insert(r.Context(), mfaToken)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.store.Users.DisableTwoFactorAuth(r.Context(), user.ID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
 		return
 	}
 

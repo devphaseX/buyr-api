@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -86,4 +87,53 @@ func (app *application) withPasswordAccess(r *http.Request, password string) boo
 	}
 
 	return match
+}
+
+func (app *application) createUserSessionAndSetCookies(w http.ResponseWriter, r *http.Request, user *store.User, RememberMe bool) {
+	var (
+		sessionExpiry     = app.cfg.authConfig.RefreshTokenTTL
+		accessTokenExpiry = app.cfg.authConfig.AccessTokenTTL
+	)
+	session := &store.Session{
+		UserID:     user.ID,
+		IP:         r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
+		Version:    1,
+		ExpiresAt:  time.Now().Add(sessionExpiry),
+		RememberMe: RememberMe,
+	}
+
+	if RememberMe {
+		sessionExpiry = app.cfg.authConfig.RememberMeTTL
+		session.ExpiresAt = time.Now().Add(sessionExpiry)
+		session.MaxRenewalDuration = time.Now().AddDate(0, 6, 0).Unix() //6 months
+	}
+
+	err := app.store.Sessions.Create(r.Context(), session)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	accessToken, err := app.authToken.GenerateAccessToken(user.ID, session.ID, app.cfg.authConfig.AccessTokenTTL)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	refreshToken, err := app.authToken.GenerateRefreshToken(session.ID, session.Version, sessionExpiry)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.setAuthCookiesAndRespond(w,
+		accessToken,
+		accessTokenExpiry,
+		refreshToken,
+		sessionExpiry,
+	)
 }
