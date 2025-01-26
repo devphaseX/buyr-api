@@ -40,6 +40,7 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 
 		// Fetch the user associated with the token
 		user, err := app.store.Users.GetByID(r.Context(), payload.UserID)
+
 		if err != nil {
 			app.unauthorizedResponse(w, r, "invalid authentication token")
 			return

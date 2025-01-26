@@ -138,7 +138,6 @@ func (app *application) viewRecoveryCodes(w http.ResponseWriter, r *http.Request
 	}
 
 	recoveryCodes, err := encrypt.DecryptRecoveryCodes(user.RecoveryCodes, app.cfg.encryptConfig.masterSecretKey)
-
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -146,6 +145,40 @@ func (app *application) viewRecoveryCodes(w http.ResponseWriter, r *http.Request
 
 	app.successResponse(w, http.StatusOK, envelope{
 		"recovery_codes": recoveryCodes,
+	})
+
+}
+
+func (app *application) resetRecoveryCodes(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromCtx(r)
+
+	if !user.TwoFactorAuthEnabled {
+		app.forbiddenResponse(w, r, "2fa not enabled")
+		return
+	}
+
+	recoveryCodes, err := encrypt.GenerateRecoveryCodes(10, 10)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	encryptedCodes, err := encrypt.EncryptRecoveryCodes(recoveryCodes, app.cfg.encryptConfig.masterSecretKey)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	if err := app.store.Users.ResetRecoveryCodes(r.Context(), user.ID, encryptedCodes); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.successResponse(w, http.StatusOK, envelope{
+		"reovery_codes": recoveryCodes,
+		"message":       "recovery code resetted successfully",
 	})
 
 }

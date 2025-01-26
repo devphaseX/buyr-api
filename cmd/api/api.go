@@ -128,6 +128,7 @@ func (app *application) routes() http.Handler {
 			r.Get("/setup", app.setup2fa)
 			r.Post("/verify", app.verify2faSetup)
 			r.Post("/recovery-codes", app.viewRecoveryCodes)
+			r.Patch("/recovery-codes/reset", app.resetRecoveryCodes)
 		})
 	})
 	return r

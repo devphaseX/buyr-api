@@ -30,7 +30,7 @@ type User struct {
 	AvatarURL            string     `json:"avatar_url"`
 	Role                 Role       `json:"role"`
 	EmailVerifiedAt      *time.Time `json:"email_verified_at"`
-	RecoveryCodes        []string   `json:"recovery_codes"`
+	RecoveryCodes        []string   `json:"-"`
 	AuthSecret           string     `json:"auth_secret"`
 	TwoFactorAuthEnabled bool       `json:"two_factor_auth_enabled"`
 	IsActive             bool       `json:"is_active"`
@@ -230,6 +230,7 @@ type UserStorage interface {
 	GetAdminUserByID(ctx context.Context, userID string) (*AdminUser, error)
 	GetNormalUserByID(ctx context.Context, userID string) (*NormalUser, error)
 	FlattenUser(ctx context.Context, user *User) (*FlattenedUser, error)
+	ResetRecoveryCodes(context.Context, string, []string) error
 }
 
 // UserModel represents the database model for users.
@@ -348,7 +349,7 @@ func (s *UserModel) CreateVendorUser(ctx context.Context, user *VendorUser) erro
 func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 	query := `SELECT id, email, password_hash,
 			  avatar_url, role, email_verified_at,
-			  is_active, two_factor_auth_enabled, auth_secret, created_at, updated_at FROM users
+			  is_active, two_factor_auth_enabled, auth_secret,recovery_codes, created_at, updated_at FROM users
 			  WHERE id = $1
 	`
 
@@ -369,6 +370,7 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 		&isActive,
 		&user.TwoFactorAuthEnabled,
 		&authSecret,
+		pq.Array(&user.RecoveryCodes),
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -404,7 +406,7 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error) {
 	query := `SELECT id, email, password_hash,
 			  avatar_url, role, email_verified_at,
-			  is_active,  two_factor_auth_enabled, auth_secret,created_at, updated_at FROM users
+			  is_active,  two_factor_auth_enabled, auth_secret, recovery_codes, created_at, updated_at FROM users
 			  WHERE email ilike $1
 	`
 
@@ -425,6 +427,7 @@ func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error)
 		&isActive,
 		&user.TwoFactorAuthEnabled,
 		&authSecret,
+		pq.Array(&user.RecoveryCodes),
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -778,4 +781,20 @@ func (u *UserModel) FlattenUser(ctx context.Context, user *User) (*FlattenedUser
 	}
 
 	return flattenUser, nil
+}
+
+func (u *UserModel) ResetRecoveryCodes(ctx context.Context, userID string, recoveryCodes []string) error {
+	query := `UPDATE users SET recovery_codes = $1 WHERE id = $2`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+
+	_, err := u.db.ExecContext(ctx, query, pq.Array(recoveryCodes), userID)
+
+	if err != nil {
+		return fmt.Errorf("failed to reset recovery codes: %w", err)
+	}
+
+	return err
 }

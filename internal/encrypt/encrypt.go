@@ -104,13 +104,13 @@ func EncryptRecoveryCodes(codes []string, passphrase string) ([]string, error) {
 	encryptedCodes := make([]string, size)
 
 	for i := 0; i < size; i++ {
-		secret, err := EncryptSecret(passphrase, codes[i])
+		secret, err := EncryptSecret(codes[i], passphrase)
 
 		if err != nil {
 			return nil, err
 		}
 
-		encryptedCodes = append(encryptedCodes, secret)
+		encryptedCodes[i] = secret
 	}
 
 	return encryptedCodes, nil
@@ -119,17 +119,15 @@ func EncryptRecoveryCodes(codes []string, passphrase string) ([]string, error) {
 // DecryptRecoveryCodes decrypts a group of recovery codes using AES-GCM and a passphrase.
 func DecryptRecoveryCodes(encryptedData []string, passphrase string) ([]string, error) {
 	size := len(encryptedData)
-
 	recoveryCodes := make([]string, size)
 
 	for i := 0; i < size; i++ {
-		code, err := DecryptSecret(passphrase, encryptedData[i])
-
+		code, err := DecryptSecret(encryptedData[i], passphrase)
 		if err != nil {
 			return nil, err
 		}
 
-		recoveryCodes = append(recoveryCodes, code)
+		recoveryCodes[i] = code
 	}
 
 	return recoveryCodes, nil
