@@ -119,6 +119,7 @@ func (app *application) routes() http.Handler {
 
 			r.Group(func(r chi.Router) {
 				r.Use(app.requireAuthenicatedUser)
+				r.Get("/", app.getNormalUsers)
 				r.Get("/current", app.getCurrentUser)
 
 			})
@@ -131,6 +132,13 @@ func (app *application) routes() http.Handler {
 			r.Post("/verify", app.verify2faSetup)
 			r.Post("/recovery-codes", app.viewRecoveryCodes)
 			r.Patch("/recovery-codes/reset", app.resetRecoveryCodes)
+		})
+
+		r.Route("/admin", func(r chi.Router) {
+			r.Route("/users", func(r chi.Router) {
+				r.Use(app.requireAuthenicatedUser)
+				r.Get("/", app.getNormalUsers)
+			})
 		})
 	})
 	return r

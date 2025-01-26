@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -52,6 +53,10 @@ type NormalUser struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	User        User      `json:"user"`
+}
+
+func (u *NormalUser) MarshalJSON() ([]byte, error) {
+	return json.Marshal(MarshalNormalUser(*u))
 }
 
 // VendorUser represents a vendor user in the system.
@@ -231,6 +236,7 @@ type UserStorage interface {
 	GetNormalUserByID(ctx context.Context, userID string) (*NormalUser, error)
 	FlattenUser(ctx context.Context, user *User) (*FlattenedUser, error)
 	ResetRecoveryCodes(context.Context, string, []string) error
+	GetNormalUsers(ctx context.Context, filter PaginateQueryFilter) ([]*NormalUser, Metadata, error)
 }
 
 // UserModel represents the database model for users.
@@ -797,4 +803,82 @@ func (u *UserModel) ResetRecoveryCodes(ctx context.Context, userID string, recov
 	}
 
 	return err
+}
+
+func (u *UserModel) GetNormalUsers(ctx context.Context, filter PaginateQueryFilter) ([]*NormalUser, Metadata, error) {
+	query := fmt.Sprintf(`
+		SELECT count(n.id) over(),  n.id, n.first_name, n.last_name, n.phone_number, n.user_id, n.created_at, n.updated_at,
+			   u.id, u.email, u.avatar_url, u.role, u.email_verified_at,
+			   u.is_active, u.two_factor_auth_enabled, u.created_at, u.updated_at
+		FROM normal_users n
+		JOIN users u ON n.user_id = u.id
+		ORDER BY u.%s %s
+		LIMIT $1 OFFSET $2
+	`, filter.SortColumn(), filter.SortDirection())
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	rows, err := u.db.QueryContext(ctx, query, filter.Limit(), filter.Offset())
+
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+
+	var (
+		users        []*NormalUser
+		totalRecords int
+	)
+
+	for rows.Next() {
+
+		normalUser := &NormalUser{}
+		user := &normalUser.User
+
+		var emailVerifiedAt sql.NullTime
+		var avatarURL sql.NullString
+		var isActive sql.NullBool
+
+		err := rows.Scan(
+			&totalRecords,
+			&normalUser.ID,
+			&normalUser.FirstName,
+			&normalUser.LastName,
+			&normalUser.PhoneNumber,
+			&normalUser.UserID,
+			&normalUser.CreatedAt,
+			&normalUser.UpdatedAt,
+			&user.ID,
+			&user.Email,
+			&avatarURL,
+			&user.Role,
+			&emailVerifiedAt,
+			&isActive,
+			&user.TwoFactorAuthEnabled,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, Metadata{}, err
+		}
+
+		if emailVerifiedAt.Valid {
+			user.EmailVerifiedAt = &emailVerifiedAt.Time
+		}
+
+		if avatarURL.Valid {
+			user.AvatarURL = avatarURL.String
+		}
+
+		if isActive.Valid {
+			user.IsActive = isActive.Bool
+		}
+
+		users = append(users, normalUser)
+	}
+
+	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
+
+	return users, metadata, nil
 }
