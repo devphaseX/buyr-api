@@ -15,6 +15,7 @@ require (
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/pquerna/otp v1.4.0
 	github.com/redis/go-redis/v9 v9.7.0
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.32.0
 	gopkg.in/mail.v2 v2.3.1

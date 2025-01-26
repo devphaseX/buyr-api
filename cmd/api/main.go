@@ -34,6 +34,7 @@ func main() {
 			RememberMeTTL:     env.GetDuration("REMEMBER_ME_TTL", time.Hour*24*30),
 			AccesssCookieName: env.GetString("ACCESS_COOKIE_NAME", ""),
 			RefreshCookiName:  env.GetString("REFRESH_COOKIE_NAME", ""),
+			totpIssuerName:    env.GetString("TOTP_ISSUER_NAME", "buyr"),
 		},
 		db: dbConfig{
 			dsn:          env.GetString("DB_ADDR", "postgres://mingle:adminpassword@localhost/mingle?sslmode=disable"),

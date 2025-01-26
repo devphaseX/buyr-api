@@ -99,7 +99,6 @@ func (m *RedisTokenModel) DeleteAllForUser(ctx context.Context, scope string, us
 		return fmt.Errorf("failed to fetch token hashes for user: %w", err)
 	}
 
-	fmt.Println(tokenHashes)
 	// Delete each token using its hashed key
 	for _, tokenHash := range tokenHashes {
 		redisKey := createTokenKey(scope, tokenHash)

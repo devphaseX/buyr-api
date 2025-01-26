@@ -50,6 +50,7 @@ type AuthConfig struct {
 	RememberMeTTL     time.Duration
 	AccesssCookieName string
 	RefreshCookiName  string
+	totpIssuerName    string
 }
 
 type mailConfig struct {
@@ -95,7 +96,7 @@ func (app *application) routes() http.Handler {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerNormalUser)
 			r.Post("/sign-in", app.signIn)
-			r.Post("/sign/2fa", app.verify2FA)
+			r.Post("/sign-in/2fa", app.verify2FA)
 			r.Post("/refresh", app.refreshToken)
 			r.Post("/forget-password", app.forgetPassword)
 			r.Post("/reset-password/verify-email", app.confirmForgetPasswordToken)
@@ -106,6 +107,12 @@ func (app *application) routes() http.Handler {
 
 		r.Route("/users", func(r chi.Router) {
 			r.Patch("/activate/{token}", app.activateUser)
+		})
+
+		r.Route("/mfa", func(r chi.Router) {
+			r.Use(app.AuthMiddleware)
+			r.Get("/setup", app.setup2fa)
+			r.Post("/verify", app.verify2faSetup)
 		})
 	})
 	return r

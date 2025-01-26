@@ -104,6 +104,8 @@ type UserStorage interface {
 	GetByID(ctx context.Context, userID string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	UpdatePassword(ctx context.Context, user *User, password string) error
+	EnableTwoFactorAuth(ctx context.Context, userID, authSecret string) error
+	DisableTwoFactorAuth(ctx context.Context, userID string) error
 }
 
 // UserModel represents the database model for users.
@@ -222,7 +224,7 @@ func (s *UserModel) CreateVendorUser(ctx context.Context, user *VendorUser) erro
 func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 	query := `SELECT id, email, password_hash,
 			  avatar_url, role, email_verified_at,
-			  is_active,created_at, updated_at FROM users
+			  is_active, two_factor_auth_enabled, auth_secret, created_at, updated_at FROM users
 			  WHERE id = $1
 	`
 
@@ -231,6 +233,7 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 	var emailVerifiedAt sql.NullTime
 	var avatarURL sql.NullString
 	var isActive sql.NullBool
+	var authSecret sql.NullString
 
 	err := s.db.QueryRowContext(ctx, query, userID).Scan(
 		&user.ID,
@@ -240,6 +243,8 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 		&user.Role,
 		&emailVerifiedAt,
 		&isActive,
+		&user.TwoFactorAuthEnabled,
+		&authSecret,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -265,13 +270,17 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 		user.IsActive = isActive.Bool
 	}
 
+	if authSecret.Valid {
+		user.AuthSecret = authSecret.String
+	}
+
 	return user, nil
 }
 
 func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error) {
 	query := `SELECT id, email, password_hash,
 			  avatar_url, role, email_verified_at,
-			  is_active,created_at, updated_at FROM users
+			  is_active,  two_factor_auth_enabled, auth_secret,created_at, updated_at FROM users
 			  WHERE email ilike $1
 	`
 
@@ -280,6 +289,7 @@ func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error)
 	var emailVerifiedAt sql.NullTime
 	var avatarURL sql.NullString
 	var isActive sql.NullBool
+	var authSecret sql.NullString
 
 	err := s.db.QueryRowContext(ctx, query, email).Scan(
 		&user.ID,
@@ -289,6 +299,8 @@ func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error)
 		&user.Role,
 		&emailVerifiedAt,
 		&isActive,
+		&user.TwoFactorAuthEnabled,
+		&authSecret,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -302,17 +314,20 @@ func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error)
 		}
 	}
 
-	if val, err := emailVerifiedAt.Value(); err == nil && val != nil {
-		emailVerifiedAt := val.(time.Time)
-		user.EmailVerifiedAt = &emailVerifiedAt
+	if emailVerifiedAt.Valid {
+		user.EmailVerifiedAt = &emailVerifiedAt.Time
 	}
 
-	if val, err := avatarURL.Value(); err == nil && val != nil {
-		user.AvatarURL = val.(string)
+	if avatarURL.Valid {
+		user.AvatarURL = avatarURL.String
 	}
 
-	if val, err := isActive.Value(); err == nil && val != nil {
-		user.IsActive = val.(bool)
+	if isActive.Valid {
+		user.IsActive = isActive.Bool
+	}
+
+	if authSecret.Valid {
+		user.AuthSecret = authSecret.String
 	}
 
 	return user, nil
@@ -349,4 +364,42 @@ func (s *UserModel) UpdatePassword(ctx context.Context, user *User, password str
 	defer cancel()
 	_, err = s.db.ExecContext(ctx, query, user.Password.hash, user.ID)
 	return err
+}
+
+// EnableTwoFactorAuth enables 2FA for a user.
+func (s *UserModel) EnableTwoFactorAuth(ctx context.Context, userID, authSecret string) error {
+	query := `
+		UPDATE users
+		SET auth_secret = $1, two_factor_auth_enabled = TRUE
+		WHERE id = $2
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	_, err := s.db.ExecContext(ctx, query, authSecret, userID)
+	if err != nil {
+		return fmt.Errorf("failed to enable 2FA: %w", err)
+	}
+
+	return nil
+}
+
+// DisableTwoFactorAuth disables 2FA for a user.
+func (s *UserModel) DisableTwoFactorAuth(ctx context.Context, userID string) error {
+	query := `
+		UPDATE users
+		SET auth_secret = NULL, two_factor_auth_enabled = FALSE
+		WHERE id = $1
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	_, err := s.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("failed to disable 2FA: %w", err)
+	}
+
+	return nil
 }

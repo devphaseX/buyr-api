@@ -309,7 +309,7 @@ func (app *application) verify2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify the 2FA code (e.g., using a TOTP library)
-	if !app.totp.VerifyCode(form.MfaCode, user.AuthSecret) {
+	if !app.totp.VerifyCode(user.AuthSecret, form.MfaCode) {
 		app.unauthorizedResponse(w, r, "invalid 2FA code")
 		return
 	}
@@ -379,7 +379,6 @@ func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
 
 	// Validate the refresh token
 	claims, err := app.authToken.ValidateRefreshToken(form.RefreshToken)
-	// fmt.Printf("claim: %+v", claims)
 
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid refresh token")

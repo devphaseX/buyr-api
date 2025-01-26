@@ -1,10 +1,12 @@
 package totp
 
 import (
-	"image"
+	"encoding/base64"
+	"fmt"
 	"time"
 
 	"github.com/pquerna/otp/totp"
+	"github.com/skip2/go-qrcode"
 )
 
 // totpImpl implements the TOTP interface
@@ -16,35 +18,26 @@ func New() TOTP {
 }
 
 // GenerateSecret generates a new TOTP secret
-func (t *totpImpl) GenerateSecret(issuer, accountName string) (string, error) {
+func (t *totpImpl) GenerateSecret(issuer, accountName string, size int) (string, string, error) {
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      issuer,
 		AccountName: accountName,
 	})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return key.Secret(), nil
-}
 
-// GenerateQRCode generates a QR code image for the TOTP secret
-func (t *totpImpl) GenerateQRCode(secret, issuer, accountName string) (image.Image, error) {
-	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      issuer,
-		AccountName: accountName,
-		Secret:      []byte(secret),
-	})
+	// Get the provisioning URI
+	uri := key.URL()
+
+	// Generate QR code as PNG bytes
+	qrBytes, err := qrcode.Encode(uri, qrcode.Medium, size)
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
 
-	// Generate the QR code image
-	img, err := key.Image(200, 200) // 200x200 pixels
-	if err != nil {
-		return nil, err
-	}
-
-	return img, nil
+	// Encode to base64
+	return key.Secret(), fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(qrBytes)), nil
 }
 
 // GenerateCode generates a TOTP code for the given secret
