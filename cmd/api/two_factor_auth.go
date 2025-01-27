@@ -11,12 +11,6 @@ import (
 func (app *application) setup2fa(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromCtx(r)
 
-	// Validate the user role
-	if user.Role != store.AdminRole && user.Role != store.VendorRole {
-		app.forbiddenResponse(w, r, "2FA is not available for this user role")
-		return
-	}
-
 	if user.TwoFactorAuthEnabled {
 		app.forbiddenResponse(w, r, "2fa setup already complete")
 		return

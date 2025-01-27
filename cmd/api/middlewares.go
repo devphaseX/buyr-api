@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/devphaseX/buyr-api.git/internal/store"
+	"github.com/justinas/nosurf"
 )
 
 // Define a custom type for context keys to avoid collisions
@@ -56,7 +57,7 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 				app.serverErrorResponse(w, r, err)
 				return
 			}
-			user.AdminLevel = adminUser.AdminLevel
+			user.AdminUser = adminUser
 		}
 
 		// Add the user to the request context
@@ -101,4 +102,16 @@ func (app *application) requireAuthenicatedUser(next http.Handler) http.Handler 
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func noSurf(next http.Handler) http.Handler {
+	csrfHandler := nosurf.New(next)
+	csrfHandler.SetBaseCookie(http.Cookie{
+		HttpOnly: true,
+		Path:     "/",
+		Secure:   true,
+		Name:     "csrf_token",
+	})
+
+	return csrfHandler
 }

@@ -88,6 +88,8 @@ type VendorUser struct {
 	UserID           string     `json:"user_id"`
 	ApprovedAt       *time.Time `json:"approved_at"`
 	SuspendedAt      *time.Time `json:"suspended_at"`
+	City             string     `json:"city"`
+	Country          string     `json:"country"`
 	CreatedByAdminID string     `json:"created_by_admin_id"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
@@ -246,6 +248,8 @@ func (p *password) Matches(plaintextPassword string) (bool, error) {
 
 type UserStorage interface {
 	CreateNormalUser(context.Context, *NormalUser) error
+	CreateVendorUser(ctx context.Context, user *VendorUser) error
+	CreateAdminUser(ctx context.Context, user *AdminUser) error
 	SetUserAccountAsActivate(ctx context.Context, user *User) error
 	GetByID(ctx context.Context, userID string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
@@ -258,6 +262,7 @@ type UserStorage interface {
 	FlattenUser(ctx context.Context, user *User) (*FlattenedUser, error)
 	ResetRecoveryCodes(context.Context, string, []string) error
 	GetNormalUsers(ctx context.Context, filter PaginateQueryFilter) ([]*NormalUser, Metadata, error)
+	GetVendorUsers(ctx context.Context, filter PaginateQueryFilter) ([]*VendorUser, Metadata, error)
 }
 
 // UserModel represents the database model for users.
@@ -324,13 +329,13 @@ func createNormalUser(ctx context.Context, tx *sql.Tx, user *NormalUser) error {
 // createVendorUser inserts a new vendor user into the database.
 func createVendorUser(ctx context.Context, tx *sql.Tx, user *VendorUser) error {
 	query := `
-		INSERT INTO vendor_users(id, business_name, business_address, contact_number, user_id, created_by_admin_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO vendor_users(id, business_name, business_address, contact_number, user_id,city, country, created_by_admin_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, user_id, created_at, updated_at
 	`
 
 	id := db.GenerateULID()
-	args := []any{id, user.BusinessName, user.BusinessAddress, user.ContactNumber, user.User.ID, user.CreatedByAdminID}
+	args := []any{id, user.BusinessName, user.BusinessAddress, user.ContactNumber, user.User.ID, user.City, user.Country, user.CreatedByAdminID}
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
@@ -358,6 +363,27 @@ func (s *UserModel) CreateNormalUser(ctx context.Context, user *NormalUser) erro
 	})
 }
 
+func createAdminUser(ctx context.Context, tx *sql.Tx, user *AdminUser) error {
+	query := `
+		INSERT INTO admin_users(id, first_name, last_name,admin_level, user_id)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, user_id, created_at, updated_at
+	`
+
+	id := db.GenerateULID()
+	args := []any{id, user.FirstName, user.LastName, user.AdminLevel, user.User.ID}
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&user.ID, &user.UserID, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to create an admin user: %w", err)
+	}
+
+	return nil
+}
+
 // CreateVendorUser creates a new vendor user and associated user record.
 func (s *UserModel) CreateVendorUser(ctx context.Context, user *VendorUser) error {
 	return withTrx(s.db, ctx, func(tx *sql.Tx) error {
@@ -366,6 +392,20 @@ func (s *UserModel) CreateVendorUser(ctx context.Context, user *VendorUser) erro
 		}
 
 		if err := createVendorUser(ctx, tx, user); err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (s *UserModel) CreateAdminUser(ctx context.Context, user *AdminUser) error {
+	return withTrx(s.db, ctx, func(tx *sql.Tx) error {
+		if err := createUser(ctx, tx, &user.User); err != nil {
+			return err
+		}
+
+		if err := createAdminUser(ctx, tx, user); err != nil {
 			return err
 		}
 
@@ -847,7 +887,7 @@ func (u *UserModel) GetNormalUsers(ctx context.Context, filter PaginateQueryFilt
 	}
 
 	var (
-		users        []*NormalUser
+		users        = []*NormalUser{}
 		totalRecords int
 	)
 
@@ -901,5 +941,102 @@ func (u *UserModel) GetNormalUsers(ctx context.Context, filter PaginateQueryFilt
 
 	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
 
+	return users, metadata, nil
+}
+
+func (u *UserModel) GetVendorUsers(ctx context.Context, filter PaginateQueryFilter) ([]*VendorUser, Metadata, error) {
+	query := fmt.Sprintf(`
+		SELECT count(v.id) over (), v.id, v.business_name, v.business_address, v.contact_number, v.user_id, v.created_by_admin_id,
+			   v.approved_at, v.suspended_at, v.created_at, v.updated_at,
+			   u.id, u.email, u.password_hash, u.avatar_url, u.role, u.email_verified_at,
+			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
+		FROM vendor_users v
+		JOIN users u ON v.user_id = u.id
+		ORDER BY u.%s %s
+		LIMIT $1 OFFSET $2
+	`, filter.SortColumn(), filter.SortDirection())
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	rows, err := u.db.QueryContext(ctx, query, filter.Limit(), filter.Offset())
+
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+
+	var (
+		users        = []*VendorUser{}
+		totalRecords int
+	)
+
+	for rows.Next() {
+		vendorUser := &VendorUser{}
+		user := &vendorUser.User
+
+		var emailVerifiedAt sql.NullTime
+		var avatarURL sql.NullString
+		var isActive sql.NullBool
+		var authSecret sql.NullString
+		var approvedAt sql.NullTime
+		var suspendedAt sql.NullTime
+
+		err := rows.Scan(
+			&totalRecords,
+			&vendorUser.ID,
+			&vendorUser.BusinessName,
+			&vendorUser.BusinessAddress,
+			&vendorUser.ContactNumber,
+			&vendorUser.UserID,
+			&vendorUser.CreatedByAdminID,
+			&approvedAt,
+			&suspendedAt,
+			&vendorUser.CreatedAt,
+			&vendorUser.UpdatedAt,
+			&user.ID,
+			&user.Email,
+			&user.Password.hash,
+			&avatarURL,
+			&user.Role,
+			&emailVerifiedAt,
+			&isActive,
+			&user.TwoFactorAuthEnabled,
+			&authSecret,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, Metadata{}, err
+		}
+
+		if emailVerifiedAt.Valid {
+			user.EmailVerifiedAt = &emailVerifiedAt.Time
+		}
+
+		if avatarURL.Valid {
+			user.AvatarURL = avatarURL.String
+		}
+
+		if isActive.Valid {
+			user.IsActive = isActive.Bool
+		}
+
+		if authSecret.Valid {
+			user.AuthSecret = authSecret.String
+		}
+
+		if approvedAt.Valid {
+			vendorUser.ApprovedAt = &approvedAt.Time
+		}
+
+		if suspendedAt.Valid {
+			vendorUser.SuspendedAt = &suspendedAt.Time
+		}
+
+		users = append(users, vendorUser)
+	}
+
+	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
 	return users, metadata, nil
 }

@@ -11,7 +11,7 @@ const uppercaseAlphanumeric = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 func GenerateRecoveryCodes(count int, length int) ([]string, error) {
 	codes := make([]string, count)
 	for i := 0; i < count; i++ {
-		code, err := generateRandomString(length)
+		code, err := GenerateRandomString(length)
 		if err != nil {
 			return nil, err
 		}
@@ -21,7 +21,7 @@ func GenerateRecoveryCodes(count int, length int) ([]string, error) {
 }
 
 // generateRandomString generates a random uppercase alphanumeric string of the specified length.
-func generateRandomString(length int) (string, error) {
+func GenerateRandomString(length int) (string, error) {
 	result := make([]byte, length)
 	for i := 0; i < length; i++ {
 		// Generate a random index into the uppercaseAlphanumeric string

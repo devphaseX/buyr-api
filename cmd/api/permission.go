@@ -11,7 +11,6 @@ type AuthInfo struct {
 	AdminUser   *store.AdminUser
 	IsAnonymous bool
 
-	AdminLevel store.AdminLevel
 	// Calculated properties
 	IsSuperAdmin   bool
 	IsManagerAdmin bool
@@ -24,14 +23,14 @@ func MinimumAdminLevel(level store.AdminLevel) PermissionCheck {
 		if a.IsAnonymous || a.User.Role != store.AdminRole {
 			return false
 		}
-		return a.AdminLevel.HasAccessTo(level)
+		return a.AdminUser.AdminLevel.HasAccessTo(level)
 	}
 }
 
 func (a *AuthInfo) populateAdminFlags() {
 	if a.User != nil && a.User.Role == store.AdminRole {
-		a.IsSuperAdmin = a.AdminLevel.HasAccessTo(store.AdminLevelSuper)
-		a.IsManagerAdmin = a.AdminLevel.HasAccessTo(store.AdminLevelManager)
+		a.IsSuperAdmin = a.AdminUser.AdminLevel.HasAccessTo(store.AdminLevelSuper)
+		a.IsManagerAdmin = a.AdminUser.AdminLevel.HasAccessTo(store.AdminLevelManager)
 	}
 }
 

@@ -1,11 +1,18 @@
 package main
 
 import (
+	"errors"
+	"fmt"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/form/v4"
 )
 
 func (app *application) readStringID(r *http.Request, param string) string {
@@ -136,4 +143,34 @@ func (app *application) createUserSessionAndSetCookies(w http.ResponseWriter, r 
 		refreshToken,
 		sessionExpiry,
 	)
+}
+
+func (app *application) decodeForm(r *http.Request, dst any, maxMemory int64) error {
+	err := r.ParseMultipartForm(maxMemory)
+
+	if err != nil {
+		return err
+	}
+
+	err = app.formDecoder.Decode(dst, r.PostForm)
+	fmt.Println(dst)
+
+	if err != nil {
+		var invalidDecoderError *form.InvalidDecoderError
+		if errors.As(err, &invalidDecoderError) {
+			panic(err)
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+func isImage(fileHeader *multipart.FileHeader) bool {
+	// Get the file's MIME type
+	mimeType := mime.TypeByExtension(filepath.Ext(fileHeader.Filename))
+
+	// Check if the MIME type starts with "image/"
+	return strings.HasPrefix(mimeType, "image/")
 }

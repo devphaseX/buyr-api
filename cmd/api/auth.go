@@ -13,6 +13,7 @@ import (
 	"github.com/devphaseX/buyr-api.git/internal/store/cache"
 	"github.com/devphaseX/buyr-api.git/worker"
 	"github.com/hibiken/asynq"
+	"github.com/justinas/nosurf"
 )
 
 type registerUserForm struct {
@@ -107,12 +108,17 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ScopeActivation, tokenKey)
 
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.unauthorizedResponse(w, r, "invalid or expired activation token")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
 
 	if token == nil {
-		app.unauthorizedResponse(w, r, "expired or invalid token")
+		app.unauthorizedResponse(w, r, "invalid or expired activation token")
 		return
 	}
 
@@ -121,12 +127,10 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrRecordNotFound):
-			app.unauthorizedResponse(w, r, "expired or invalid token")
-
+			app.unauthorizedResponse(w, r, "invalid or expired activation token")
 		default:
 			app.serverErrorResponse(w, r, err)
 		}
-
 		return
 	}
 
@@ -873,4 +877,9 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 	app.successResponse(w, http.StatusOK, envelope{
 		"message": "Password reset successfully.",
 	})
+}
+
+func (app *application) getCSRFToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-CSRF-Token", nosurf.Token(r))
+	w.WriteHeader(http.StatusOK)
 }

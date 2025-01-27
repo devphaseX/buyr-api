@@ -8,12 +8,14 @@ import (
 	"github.com/devphaseX/buyr-api.git/internal/auth"
 	"github.com/devphaseX/buyr-api.git/internal/db"
 	"github.com/devphaseX/buyr-api.git/internal/env"
+	"github.com/devphaseX/buyr-api.git/internal/fileobject"
 	"github.com/devphaseX/buyr-api.git/internal/mailer"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/store/cache"
 	"github.com/devphaseX/buyr-api.git/internal/totp.go"
 	"github.com/devphaseX/buyr-api.git/internal/validator"
 	"github.com/devphaseX/buyr-api.git/worker"
+	"github.com/go-playground/form/v4"
 	"github.com/hibiken/asynq"
 	"go.uber.org/zap"
 )
@@ -66,6 +68,12 @@ func main() {
 		encryptConfig: encryptConfig{
 			masterSecretKey: env.GetString("MASTER_SECRET_KEY", ""),
 		},
+
+		supabaseConfig: supabaseConfig{
+			apiURL:                 env.GetString("SUPABASE_PROJECT_URL", ""),
+			apiKey:                 env.GetString("SUPABASE_API_KEY", ""),
+			profileImageBucketName: env.GetString("SUPABASE_PROFILE_BUCKET_NAME", ""),
+		},
 	}
 
 	logger := zap.Must(zap.NewProduction()).Sugar()
@@ -94,12 +102,21 @@ func main() {
 	if err != nil {
 		logger.Panic(err)
 	}
+
+	formDecoder := form.NewDecoder()
+	fileobject, err := fileobject.NewSupabaseStorage(cfg.supabaseConfig.apiURL, cfg.supabaseConfig.apiKey)
+
+	if err != nil {
+		logger.Panic(err)
+	}
 	app := &application{
 		cfg:             cfg,
 		totp:            totp,
 		logger:          logger,
 		store:           store,
 		cacheStore:      cacheStore,
+		formDecoder:     formDecoder,
+		fileobject:      fileobject,
 		taskDistributor: taskDistributor,
 		authToken:       authToken,
 	}

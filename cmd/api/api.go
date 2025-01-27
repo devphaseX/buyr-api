@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/auth"
+	"github.com/devphaseX/buyr-api.git/internal/fileobject"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/store/cache"
 	"github.com/devphaseX/buyr-api.git/internal/totp.go"
 	"github.com/devphaseX/buyr-api.git/worker"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-playground/form/v4"
 	"go.uber.org/zap"
 )
 
@@ -27,20 +29,23 @@ type application struct {
 	logger          *zap.SugaredLogger
 	store           *store.Storage
 	authToken       auth.AuthToken
+	fileobject      fileobject.FileObject
+	formDecoder     *form.Decoder
 	cacheStore      *cache.Storage
 	taskDistributor worker.TaskDistributor
 }
 
 type config struct {
-	addr          string
-	env           string
-	apiURL        string
-	clientURL     string
-	db            dbConfig
-	redisCfg      redisConfig
-	mailConfig    mailConfig
-	authConfig    AuthConfig
-	encryptConfig encryptConfig
+	addr           string
+	env            string
+	apiURL         string
+	clientURL      string
+	db             dbConfig
+	redisCfg       redisConfig
+	mailConfig     mailConfig
+	authConfig     AuthConfig
+	encryptConfig  encryptConfig
+	supabaseConfig supabaseConfig
 }
 
 type AuthConfig struct {
@@ -74,6 +79,12 @@ type mailTrapConfig struct {
 	isSandbox       bool
 }
 
+type supabaseConfig struct {
+	apiURL                 string
+	apiKey                 string
+	profileImageBucketName string
+}
+
 type dbConfig struct {
 	dsn          string
 	maxOpenConns int
@@ -96,12 +107,15 @@ func (app *application) routes() http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+	// r.Use(noSurf)
 
 	r.Use(app.AuthMiddleware)
 
 	//roles
 
 	r.Route("/v1", func(r chi.Router) {
+		r.Get("/csrf-token", app.getCSRFToken)
+
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerNormalUser)
 			r.Post("/sign-in", app.signIn)
@@ -130,22 +144,28 @@ func (app *application) routes() http.Handler {
 
 		r.Route("/mfa", func(r chi.Router) {
 			r.Use(app.requireAuthenicatedUser)
-			r.Use(app.CheckPermissions(RequireRoles(store.AdminRole, store.UserRole)))
+			r.With(app.CheckPermissions(RequireRoles(store.AdminRole, store.VendorRole))).Group(
+				func(r chi.Router) {
+					r.Get("/setup", app.setup2fa)
+					r.Post("/verify", app.verify2faSetup)
+					r.Post("/recovery-codes", app.viewRecoveryCodes)
+					r.Patch("/recovery-codes/reset", app.resetRecoveryCodes)
+				},
+			)
 
-			r.Group(func(r chi.Router) {
-				r.Get("/setup", app.setup2fa)
-				r.Post("/verify", app.verify2faSetup)
-				r.Post("/recovery-codes", app.viewRecoveryCodes)
-				r.Patch("/recovery-codes/reset", app.resetRecoveryCodes)
-
-			})
 		})
 
 		r.Route("/admin", func(r chi.Router) {
-			r.Route("/users", func(r chi.Router) {
+			r.Use(app.requireAuthenicatedUser)
+			// r.Use(app.CheckPermissions(RequireRoles(store.AdminRole)))
 
-				r.Use(app.requireAuthenicatedUser)
+			r.Route("/users", func(r chi.Router) {
 				r.Get("/", app.getNormalUsers)
+			})
+
+			r.Route("/vendors", func(r chi.Router) {
+				r.Get("/", app.getVendorUsers)
+				r.Post("/", app.createVendor)
 			})
 		})
 	})
