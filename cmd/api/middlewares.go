@@ -20,7 +20,10 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 		token := extractToken(r, app)
 		if token == "" {
 			// Add the user to the request context
-			ctx := context.WithValue(r.Context(), authContextKey, store.AnonymousUser)
+			ctx := context.WithValue(r.Context(), authContextKey, &AuthInfo{
+				User:        store.AnonymousUser,
+				IsAnonymous: true,
+			})
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
@@ -46,6 +49,16 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// After loading user
+		if user.Role == store.AdminRole {
+			adminUser, err := app.store.Users.GetAdminUserByID(r.Context(), user.ID)
+			if err != nil {
+				app.serverErrorResponse(w, r, err)
+				return
+			}
+			user.AdminLevel = adminUser.AdminLevel
+		}
+
 		// Add the user to the request context
 		ctx := context.WithValue(r.Context(), authContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -69,8 +82,8 @@ func extractToken(r *http.Request, app *application) string {
 }
 
 // getUserFromCtx retrieves the authenticated user from the request context
-func getUserFromCtx(r *http.Request) *store.User {
-	user, ok := r.Context().Value(authContextKey).(*store.User)
+func getUserFromCtx(r *http.Request) *AuthInfo {
+	user, ok := r.Context().Value(authContextKey).(*AuthInfo)
 	if !ok {
 		panic("user context middleware not ran or functioning properly")
 	}
@@ -81,7 +94,7 @@ func (app *application) requireAuthenicatedUser(next http.Handler) http.Handler 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := getUserFromCtx(r)
 
-		if user.IsAnonymous() {
+		if user.User.IsAnonymous() {
 			app.unauthorizedResponse(w, r, "you must be authenticated to access this resource")
 			return
 		}

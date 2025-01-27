@@ -23,7 +23,7 @@ func (app *application) setup2fa(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Flatten the user to get role-specific details
-	flattenUser, err := app.store.Users.FlattenUser(r.Context(), user)
+	flattenUser, err := app.store.Users.FlattenUser(r.Context(), user.User)
 	if err != nil {
 		app.serverErrorResponse(w, r, fmt.Errorf("failed to flatten user: %w", err))
 		return

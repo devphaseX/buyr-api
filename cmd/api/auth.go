@@ -296,7 +296,7 @@ func (app *application) verifyLogin2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.createUserSessionAndSetCookies(w, r, user, signin2faPayload.RememberMe)
+	app.createUserSessionAndSetCookies(w, r, user.User, signin2faPayload.RememberMe)
 }
 
 type verifyLogin2faRecoveryCodeForm struct {
@@ -379,7 +379,7 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 	}
 
 	// Create user session and set cookies
-	app.createUserSessionAndSetCookies(w, r, user, signin2faPayload.RememberMe)
+	app.createUserSessionAndSetCookies(w, r, user.User, signin2faPayload.RememberMe)
 }
 
 type refreshRequest struct {

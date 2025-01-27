@@ -99,6 +99,8 @@ func (app *application) routes() http.Handler {
 
 	r.Use(app.AuthMiddleware)
 
+	//roles
+
 	r.Route("/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerNormalUser)
@@ -128,14 +130,20 @@ func (app *application) routes() http.Handler {
 
 		r.Route("/mfa", func(r chi.Router) {
 			r.Use(app.requireAuthenicatedUser)
-			r.Get("/setup", app.setup2fa)
-			r.Post("/verify", app.verify2faSetup)
-			r.Post("/recovery-codes", app.viewRecoveryCodes)
-			r.Patch("/recovery-codes/reset", app.resetRecoveryCodes)
+			r.Use(app.CheckPermissions(RequireRoles(store.AdminRole, store.UserRole)))
+
+			r.Group(func(r chi.Router) {
+				r.Get("/setup", app.setup2fa)
+				r.Post("/verify", app.verify2faSetup)
+				r.Post("/recovery-codes", app.viewRecoveryCodes)
+				r.Patch("/recovery-codes/reset", app.resetRecoveryCodes)
+
+			})
 		})
 
 		r.Route("/admin", func(r chi.Router) {
 			r.Route("/users", func(r chi.Router) {
+
 				r.Use(app.requireAuthenicatedUser)
 				r.Get("/", app.getNormalUsers)
 			})

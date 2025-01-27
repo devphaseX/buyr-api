@@ -21,6 +21,26 @@ var (
 	AdminRole  Role = "admin"
 )
 
+type AdminLevel string
+
+var (
+	AdminLevelSuper   AdminLevel = "super"
+	AdminLevelManager AdminLevel = "manager"
+	AdminLevelSupport AdminLevel = "support"
+	AdminLevelNone    AdminLevel = "none"
+)
+
+var adminLevelWeights = map[AdminLevel]int{
+	AdminLevelSuper:   3,
+	AdminLevelManager: 2,
+	AdminLevelSupport: 1,
+	AdminLevelNone:    0,
+}
+
+func (a AdminLevel) HasAccessTo(required AdminLevel) bool {
+	return adminLevelWeights[a] >= adminLevelWeights[required]
+}
+
 var AnonymousUser = &User{}
 
 // User represents a user in the system.
@@ -76,13 +96,14 @@ type VendorUser struct {
 
 // NormalUser represents a normal user in the system.
 type AdminUser struct {
-	ID        string    `json:"id"`
-	FirstName string    `json:"first_name"`
-	LastName  string    `json:"last_name"`
-	UserID    string    `json:"user_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	User      User      `json:"user"`
+	ID         string     `json:"id"`
+	FirstName  string     `json:"first_name"`
+	LastName   string     `json:"last_name"`
+	UserID     string     `json:"user_id"`
+	AdminLevel AdminLevel `json:"admin_level"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	User       User       `json:"user"`
 }
 
 // FlattenedUser combines all user types into a single struct

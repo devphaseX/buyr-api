@@ -12,7 +12,7 @@ import (
 func (app *application) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromCtx(r)
 
-	userProfile, err := app.store.Users.FlattenUser(r.Context(), user)
+	userProfile, err := app.store.Users.FlattenUser(r.Context(), user.User)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -24,11 +24,13 @@ func (app *application) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (app *application) getUser(ctx context.Context, userID string) (*store.User, error) {
+func (app *application) getUser(ctx context.Context, userID string) (*AuthInfo, error) {
 	var (
 		user *store.User
 		err  error
 	)
+
+	authInfo := &AuthInfo{}
 
 	if app.cfg.redisCfg.enabled {
 		user, err = app.cacheStore.Users.Get(ctx, userID)
@@ -40,7 +42,8 @@ func (app *application) getUser(ctx context.Context, userID string) (*store.User
 
 		if user != nil {
 			app.logger.Infow("cache hit", "key", "user", "id", userID)
-			return user, nil
+			authInfo.User = user
+			return authInfo, nil
 		}
 	}
 
@@ -57,9 +60,30 @@ func (app *application) getUser(ctx context.Context, userID string) (*store.User
 		return nil, err
 	}
 
-	return user, nil
+	authInfo.User = user
+	return authInfo, nil
 }
 
+/*
+	authInfo := &AuthInfo{
+			User: user,
+		}
+
+		switch user.Role {
+		case store.UserRole:
+			normalUser, err := app.store.Users.GetNormalUserByID(ctx, userID string)
+		case store.AdminRole:
+			adminUser, err := app.store.Users.GetAdminUserByID(ctx, user.ID)
+			if err == nil {
+				authInfo.AdminUser = adminUser
+			}
+		case store.VendorRole:
+			vendorUser, err := app.store.Users.GetVendorUserByID(ctx, user.ID)
+			if err == nil {
+				authInfo.VendorUser = vendorUser
+			}
+		}
+*/
 func (app *application) getNormalUsers(w http.ResponseWriter, r *http.Request) {
 	fq := store.PaginateQueryFilter{
 		Page:         1,
