@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/devphaseX/buyr-api.git/internal/store"
@@ -21,7 +20,6 @@ type PermissionCheck func(*AuthInfo) bool
 
 func MinimumAdminLevel(level store.AdminLevel) PermissionCheck {
 	return func(a *AuthInfo) bool {
-		fmt.Println(a.User.Role, a.AdminUser.AdminLevel.HasAccessTo(level), a.User.Role != store.AdminRole)
 		if a.IsAnonymous || a.User.Role != store.AdminRole {
 			return false
 		}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -153,7 +152,6 @@ func (app *application) decodeForm(r *http.Request, dst any, maxMemory int64) er
 	}
 
 	err = app.formDecoder.Decode(dst, r.PostForm)
-	fmt.Println(dst)
 
 	if err != nil {
 		var invalidDecoderError *form.InvalidDecoderError

@@ -38,7 +38,6 @@ var adminLevelWeights = map[AdminLevel]int{
 }
 
 func (a AdminLevel) HasAccessTo(required AdminLevel) bool {
-	fmt.Println(adminLevelWeights[a], adminLevelWeights[required])
 	return adminLevelWeights[a] >= adminLevelWeights[required]
 }
 
