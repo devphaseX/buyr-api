@@ -161,6 +161,7 @@ func (app *application) routes() http.Handler {
 
 			r.Route("/members", func(r chi.Router) {
 				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelSuper))).Post("/", app.createAdmin)
+				r.Get("/", app.getAdminUsers)
 			})
 
 			r.Route("/users", func(r chi.Router) {

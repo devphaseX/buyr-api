@@ -62,11 +62,16 @@ func New() *Validator {
 	_ = en_translations.RegisterDefaultTranslations(validate, trans)
 
 	validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
-		jsonTag := fld.Tag.Get("json")
-		if jsonTag == "" || jsonTag == "-" {
+		fieldTag := fld.Tag.Get("json")
+
+		if fieldTag == "" {
+			fieldTag = fld.Tag.Get("form")
+		}
+
+		if fieldTag == "" || fieldTag == "-" {
 			return fld.Name
 		}
-		return strings.Split(jsonTag, ",")[0]
+		return strings.Split(fieldTag, ",")[0]
 	})
 
 	registerCustomErrorMessages(validate, trans)

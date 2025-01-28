@@ -12,9 +12,9 @@ import (
 )
 
 type createAdminForm struct {
-	FirstName string `json:"first_name" validate:"required,min=1,max=255"`
-	LastName  string `json:"last_name" validate:"required,min=1,max=255"`
-	Email     string `json:"email" validate:"required,email"`
+	FirstName string `form:"first_name" validate:"required,min=1,max=255"`
+	LastName  string `form:"last_name" validate:"required,min=1,max=255"`
+	Email     string `form:"email" validate:"required,email"`
 }
 
 func (app *application) createAdmin(w http.ResponseWriter, r *http.Request) {
@@ -109,5 +109,31 @@ func (app *application) createAdmin(w http.ResponseWriter, r *http.Request) {
 	// Return a success response
 	app.successResponse(w, http.StatusCreated, envelope{
 		"message": "Vendor created successfully",
+	})
+}
+
+func (app *application) getAdminUsers(w http.ResponseWriter, r *http.Request) {
+	fq := store.PaginateQueryFilter{
+		Page:         1,
+		PageSize:     20,
+		Sort:         "created_at",
+		SortSafelist: []string{"created_at", "-created_at"},
+	}
+
+	if err := fq.Parse(r); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	users, metadata, err := app.store.Users.GetAdminUsers(r.Context(), fq)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.successResponse(w, http.StatusOK, envelope{
+		"users":    users,
+		"metadata": metadata,
 	})
 }

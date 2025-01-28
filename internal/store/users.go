@@ -38,6 +38,7 @@ var adminLevelWeights = map[AdminLevel]int{
 }
 
 func (a AdminLevel) HasAccessTo(required AdminLevel) bool {
+	fmt.Println(adminLevelWeights[a], adminLevelWeights[required])
 	return adminLevelWeights[a] >= adminLevelWeights[required]
 }
 
@@ -97,6 +98,10 @@ type VendorUser struct {
 	User             User       `json:"user"`
 }
 
+func (u *VendorUser) MarshalJSON() ([]byte, error) {
+	return json.Marshal(MarshalVendorUser(*u))
+}
+
 // NormalUser represents a normal user in the system.
 type AdminUser struct {
 	ID         string     `json:"id"`
@@ -107,6 +112,10 @@ type AdminUser struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	User       User       `json:"user"`
+}
+
+func (u *AdminUser) MarshalJSON() ([]byte, error) {
+	return json.Marshal(MarshalAdminUser(*u))
 }
 
 // FlattenedUser combines all user types into a single struct
@@ -264,6 +273,7 @@ type UserStorage interface {
 	ResetRecoveryCodes(context.Context, string, []string) error
 	GetNormalUsers(ctx context.Context, filter PaginateQueryFilter) ([]*NormalUser, Metadata, error)
 	GetVendorUsers(ctx context.Context, filter PaginateQueryFilter) ([]*VendorUser, Metadata, error)
+	GetAdminUsers(ctx context.Context, filter PaginateQueryFilter) ([]*AdminUser, Metadata, error)
 }
 
 // UserModel represents the database model for users.
@@ -279,8 +289,8 @@ func NewUserModel(db *sql.DB) *UserModel {
 // createUser inserts a new user into the database.
 func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	query := `
-		INSERT INTO users(id, email, password_hash, role)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users(id, email, password_hash, role, force_password_change)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -289,7 +299,7 @@ func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	}
 
 	id := db.GenerateULID()
-	args := []any{id, user.Email, user.Password.hash, user.Role}
+	args := []any{id, user.Email, user.Password.hash, user.Role, user.ForcePasswordChange}
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
@@ -419,7 +429,7 @@ func (s *UserModel) CreateAdminUser(ctx context.Context, user *AdminUser) error 
 }
 
 func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
-	query := `SELECT id, email, password_hash,
+	query := `SELECT id, email, password_hash,force_password_change,
 			  avatar_url, role, email_verified_at,
 			  is_active, two_factor_auth_enabled, auth_secret,recovery_codes, created_at, updated_at FROM users
 			  WHERE id = $1
@@ -436,6 +446,7 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 		&user.ID,
 		&user.Email,
 		&user.Password.hash,
+		&user.ForcePasswordChange,
 		&avatarURL,
 		&user.Role,
 		&emailVerifiedAt,
@@ -476,7 +487,7 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 }
 
 func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error) {
-	query := `SELECT id, email, password_hash,
+	query := `SELECT id, email, password_hash,force_password_change,
 			  avatar_url, role, email_verified_at,
 			  is_active,  two_factor_auth_enabled, auth_secret, recovery_codes, created_at, updated_at FROM users
 			  WHERE email ilike $1
@@ -493,6 +504,7 @@ func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error)
 		&user.ID,
 		&user.Email,
 		&user.Password.hash,
+		&user.ForcePasswordChange,
 		&avatarURL,
 		&user.Role,
 		&emailVerifiedAt,
@@ -674,7 +686,7 @@ func (s *UserModel) GetNormalUserByID(ctx context.Context, userID string) (*Norm
 
 func (s *UserModel) GetAdminUserByID(ctx context.Context, userID string) (*AdminUser, error) {
 	query := `
-		SELECT a.id, a.first_name, a.last_name, a.user_id, a.created_at, a.updated_at,
+		SELECT a.id, a.first_name, a.last_name, a.user_id,a.admin_level, a.created_at, a.updated_at,
 			   u.id, u.email, u.password_hash, u.avatar_url, u.role, u.email_verified_at,
 			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
 		FROM admin_users a
@@ -683,7 +695,7 @@ func (s *UserModel) GetAdminUserByID(ctx context.Context, userID string) (*Admin
 	`
 
 	adminUser := &AdminUser{}
-	user := &User{}
+	user := &adminUser.User
 
 	var emailVerifiedAt sql.NullTime
 	var avatarURL sql.NullString
@@ -695,6 +707,7 @@ func (s *UserModel) GetAdminUserByID(ctx context.Context, userID string) (*Admin
 		&adminUser.FirstName,
 		&adminUser.LastName,
 		&adminUser.UserID,
+		&adminUser.AdminLevel,
 		&adminUser.CreatedAt,
 		&adminUser.UpdatedAt,
 		&user.ID,
@@ -734,8 +747,6 @@ func (s *UserModel) GetAdminUserByID(ctx context.Context, userID string) (*Admin
 	if authSecret.Valid {
 		user.AuthSecret = authSecret.String
 	}
-
-	adminUser.User = *user
 
 	return adminUser, nil
 }
@@ -1040,6 +1051,88 @@ func (u *UserModel) GetVendorUsers(ctx context.Context, filter PaginateQueryFilt
 		}
 
 		users = append(users, vendorUser)
+	}
+
+	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
+	return users, metadata, nil
+}
+
+func (u *UserModel) GetAdminUsers(ctx context.Context, filter PaginateQueryFilter) ([]*AdminUser, Metadata, error) {
+	query := fmt.Sprintf(`
+		SELECT count(a.id) over(), a.id, a.first_name, a.last_name,a.admin_level, a.user_id, a.created_at, a.updated_at,
+			   u.id, u.email, u.password_hash, u.avatar_url, u.role, u.email_verified_at,
+			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
+		FROM admin_users a
+		JOIN users u ON a.user_id = u.id
+		ORDER BY u.%s %s
+		LIMIT $1 OFFSET $2
+	`, filter.SortColumn(), filter.SortDirection())
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	rows, err := u.db.QueryContext(ctx, query, filter.Limit(), filter.Offset())
+
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+
+	var (
+		users        = []*AdminUser{}
+		totalRecords int
+	)
+
+	for rows.Next() {
+		adminUser := &AdminUser{}
+		user := &adminUser.User
+
+		var emailVerifiedAt sql.NullTime
+		var avatarURL sql.NullString
+		var isActive sql.NullBool
+		var authSecret sql.NullString
+
+		err := rows.Scan(
+			&totalRecords,
+			&adminUser.ID,
+			&adminUser.FirstName,
+			&adminUser.LastName,
+			&adminUser.AdminLevel,
+			&adminUser.UserID,
+			&adminUser.CreatedAt,
+			&adminUser.UpdatedAt,
+			&user.ID,
+			&user.Email,
+			&user.Password.hash,
+			&avatarURL,
+			&user.Role,
+			&emailVerifiedAt,
+			&isActive,
+			&user.TwoFactorAuthEnabled,
+			&authSecret,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, Metadata{}, ErrRecordNotFound
+		}
+
+		if emailVerifiedAt.Valid {
+			user.EmailVerifiedAt = &emailVerifiedAt.Time
+		}
+
+		if avatarURL.Valid {
+			user.AvatarURL = avatarURL.String
+		}
+
+		if isActive.Valid {
+			user.IsActive = isActive.Bool
+		}
+
+		if authSecret.Valid {
+			user.AuthSecret = authSecret.String
+		}
+		users = append(users, adminUser)
 	}
 
 	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)

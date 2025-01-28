@@ -146,6 +146,13 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ScopeActivation, user.ID)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	if user.ForcePasswordChange {
 		payload, err := json.Marshal(forgetPassword2faPayload{
 			Email: user.Email,
@@ -176,13 +183,6 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 			"force_password_change": true,
 		}
 		app.successResponse(w, http.StatusOK, response)
-
-	}
-
-	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ScopeActivation, user.ID)
-
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
 		return
 	}
 

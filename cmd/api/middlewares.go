@@ -60,6 +60,7 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 			user.AdminUser = adminUser
 		}
 
+		user.populateAdminFlags()
 		// Add the user to the request context
 		ctx := context.WithValue(r.Context(), authContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
