@@ -104,14 +104,67 @@ func (app *application) requireAuthenicatedUser(next http.Handler) http.Handler 
 	})
 }
 
-func noSurf(next http.Handler) http.Handler {
-	csrfHandler := nosurf.New(next)
-	csrfHandler.SetBaseCookie(http.Cookie{
-		HttpOnly: true,
-		Path:     "/",
-		Secure:   true,
-		Name:     "csrf_token",
-	})
+func LoadCSRF(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if request is from a browser
+		isBrowser := isBrowserRequest(r)
 
-	return csrfHandler
+		// If not a browser request, skip CSRF
+		if !isBrowser {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// For browser requests, only apply CSRF to form submissions
+		contentType := r.Header.Get("Content-Type")
+		isFormData := strings.Contains(contentType, "multipart/form-data") ||
+			strings.Contains(contentType, "application/x-www-form-urlencoded")
+
+		if isFormData {
+			csrfHandler := nosurf.New(next)
+			csrfHandler.ServeHTTP(w, r)
+			return
+		}
+
+		// For all other requests, proceed without CSRF
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Helper function to determine if request is from a browser
+func isBrowserRequest(r *http.Request) bool {
+	// Check User-Agent
+	userAgent := r.Header.Get("User-Agent")
+
+	// Common browser indicators
+	browserIndicators := []string{
+		"Mozilla",
+		"Chrome",
+		"Safari",
+		"Firefox",
+		"Edge",
+		"Opera",
+	}
+
+	// Check for browser-like User-Agent
+	hasBrowserUA := false
+	for _, indicator := range browserIndicators {
+		if strings.Contains(userAgent, indicator) {
+			hasBrowserUA = true
+			break
+		}
+	}
+
+	// Check for common browser headers
+	acceptHeader := r.Header.Get("Accept")
+	hasAcceptHeader := strings.Contains(acceptHeader, "text/html")
+
+	// Check if request accepts HTML
+	secFetchSite := r.Header.Get("Sec-Fetch-Site")
+	secFetchMode := r.Header.Get("Sec-Fetch-Mode")
+	hasSecHeaders := secFetchSite != "" || secFetchMode != ""
+
+	// Consider it a browser request if it has a browser-like User-Agent
+	// and either accepts HTML or has Sec-Fetch headers
+	return hasBrowserUA && (hasAcceptHeader || hasSecHeaders)
 }
