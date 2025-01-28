@@ -104,7 +104,7 @@ func (app *application) requireAuthenicatedUser(next http.Handler) http.Handler 
 	})
 }
 
-func LoadCSRF(next http.Handler) http.Handler {
+func (app *application) loadCSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if request is from a browser
 		isBrowser := isBrowserRequest(r)
@@ -122,6 +122,10 @@ func LoadCSRF(next http.Handler) http.Handler {
 
 		if isFormData {
 			csrfHandler := nosurf.New(next)
+			csrfHandler.SetFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				app.errorResponse(w, http.StatusBadRequest, `Invalid or missing CSRF token.
+					Please ensure that your request includes a valid CSRF token in the headers or form data.`)
+			}))
 			csrfHandler.ServeHTTP(w, r)
 			return
 		}

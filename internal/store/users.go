@@ -53,6 +53,7 @@ type User struct {
 	EmailVerifiedAt      *time.Time `json:"email_verified_at"`
 	RecoveryCodes        []string   `json:"-"`
 	AuthSecret           string     `json:"auth_secret"`
+	ForcePasswordChange  bool       `json:"force_password_change"`
 	TwoFactorAuthEnabled bool       `json:"two_factor_auth_enabled"`
 	IsActive             bool       `json:"is_active"`
 	CreatedAt            time.Time  `json:"created_at"`
@@ -282,6 +283,10 @@ func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at, updated_at
 	`
+
+	if len(user.Password.hash) == 0 {
+		user.Password.hash = []byte{}
+	}
 
 	id := db.GenerateULID()
 	args := []any{id, user.Email, user.Password.hash, user.Role}

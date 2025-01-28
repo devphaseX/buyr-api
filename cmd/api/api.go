@@ -109,7 +109,7 @@ func (app *application) routes() http.Handler {
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Use(app.AuthMiddleware)
-	r.Use(LoadCSRF)
+	r.Use(app.loadCSRF)
 
 	//roles
 
@@ -131,7 +131,7 @@ func (app *application) routes() http.Handler {
 		})
 
 		r.Route("/users", func(r chi.Router) {
-			r.Patch("/activate/{token}", app.activateUser)
+			r.Patch("/activate-account", app.activateUser)
 
 			r.Group(func(r chi.Router) {
 				r.Use(app.requireAuthenicatedUser)

@@ -103,7 +103,7 @@ func (app *application) registerNormalUser(w http.ResponseWriter, r *http.Reques
 }
 
 func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
-	tokenKey := app.readStringID(r, "token")
+	tokenKey := r.URL.Query().Get("token")
 
 	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ScopeActivation, tokenKey)
 
@@ -146,6 +146,39 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if user.ForcePasswordChange {
+		payload, err := json.Marshal(forgetPassword2faPayload{
+			Email: user.Email,
+		})
+
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		fogetPasswordToken, err := app.cacheStore.Tokens.New(user.ID, time.Hour*4, cache.ForgetPassword, payload)
+
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		err = app.cacheStore.Tokens.Insert(r.Context(), fogetPasswordToken)
+
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		response := envelope{
+			"message":               "Account activated successfully. Password reset required.",
+			"reset_token":           fogetPasswordToken.Plaintext,
+			"force_password_change": true,
+		}
+		app.successResponse(w, http.StatusOK, response)
+
+	}
+
 	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ScopeActivation, user.ID)
 
 	if err != nil {
@@ -153,7 +186,11 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.successResponse(w, http.StatusOK, nil)
+	response := envelope{
+		"message": "Account activated successfully.",
+	}
+
+	app.successResponse(w, http.StatusOK, response)
 }
 
 type signInForm struct {

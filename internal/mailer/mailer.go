@@ -8,6 +8,7 @@ var templateFS embed.FS
 var (
 	ActivateAccountEmailTemplate = "activate_account_email.tmpl"
 	RecoverAccountEmailTemplate  = "recover_account_email.tmpl"
+	VendorActivationTemplate     = "vendor_activation_email.tmpl"
 )
 
 type Client interface {

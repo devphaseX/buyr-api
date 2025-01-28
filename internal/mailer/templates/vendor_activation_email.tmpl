@@ -1,0 +1,77 @@
+{{define "subject"}}Activate Your Vendor Account{{end}}
+
+{{define "plainBody"}}
+Hello {{.Username}},
+
+Your admin account for {{.Platform}} has been created.
+Please click the link below to activate your account and set your password:
+
+{{.ActivationURL}}
+
+This link expires in 24 hours. If you didn't request this, please contact support.
+
+---
+
+Thanks for signing up for Mingle. We're excited to have you on board!
+
+Before you can start using Mingle, you need to confirm your email address. Click the link below to confirm your email address:
+
+{{.ActivationURL}}
+
+If you want to activate your account manually, copy and paste the code from the link above.
+
+If you didn't sign up for Mingle, you can safely ignore this email.
+
+Thanks,
+The Mingle Team
+{{end}}
+
+{{define "body"}}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2>Hello {{.Username}},</h2>
+
+        <p>Your admin account for {{.Platform}} has been created.</p>
+
+        <p>Please click the link below to activate your account and set your password:</p>
+
+        <p style="margin: 25px 0;">
+            <a href="{{.ActivationURL}}"
+               style="background-color: #4CAF50;
+                      color: white;
+                      padding: 12px 20px;
+                      text-decoration: none;
+                      border-radius: 4px;
+                      display: inline-block;">
+                Activate Account
+            </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+            This link expires in 24 hours. If you didn't request this, please contact support.
+        </p>
+
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+
+        <p>Thanks for signing up for Mingle. We're excited to have you on board!</p>
+
+        <p>Before you can start using Mingle, you need to confirm your email address. Click the link below to confirm your email address:</p>
+
+        <p><a href="{{.ActivationURL}}">{{.ActivationURL}}</a></p>
+
+        <p>If you want to activate your account manually, copy and paste the code from the link above.</p>
+
+        <p>If you didn't sign up for Mingle, you can safely ignore this email.</p>
+
+        <p>Thanks,</p>
+        <p>The Mingle Team</p>
+    </div>
+</body>
+</html>
+{{end}}

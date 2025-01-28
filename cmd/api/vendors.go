@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
-	"github.com/devphaseX/buyr-api.git/internal/encrypt"
 	"github.com/devphaseX/buyr-api.git/internal/store"
+	"github.com/devphaseX/buyr-api.git/internal/store/cache"
+	"github.com/devphaseX/buyr-api.git/worker"
 )
 
 func (app *application) getVendorUsers(w http.ResponseWriter, r *http.Request) {
@@ -91,21 +93,12 @@ func (app *application) createVendor(w http.ResponseWriter, r *http.Request) {
 		City:             form.City,
 		Country:          form.Country,
 		User: store.User{
-			Email:     form.Email,
-			Role:      store.VendorRole,
-			AvatarURL: photoURL,
+			Email:               form.Email,
+			Role:                store.VendorRole,
+			ForcePasswordChange: true,
+			AvatarURL:           photoURL,
 		},
 	}
-
-	genPassword, err := encrypt.GenerateRandomString(8)
-	if err != nil {
-		app.serverErrorResponse(w, r, fmt.Errorf("failed to generate password: %v", err))
-		return
-	}
-
-	newVendorUser.User.Password.Set(genPassword)
-
-	fmt.Println(genPassword)
 
 	// Save the new vendor user to the database
 	if err := app.store.Users.CreateVendorUser(r.Context(), newVendorUser); err != nil {
@@ -115,6 +108,33 @@ func (app *application) createVendor(w http.ResponseWriter, r *http.Request) {
 		default:
 			app.serverErrorResponse(w, r, fmt.Errorf("failed to create vendor user: %v", err))
 		}
+		return
+	}
+
+	token, err := app.cacheStore.Tokens.New(newVendorUser.UserID, time.Hour*24*7, cache.ScopeActivation, nil)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.cacheStore.Tokens.Insert(r.Context(), token)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.taskDistributor.DistributeTaskSendVendorActivationEmail(r.Context(),
+		&worker.PayloadSendVendorActivationEmail{
+			Username:  newVendorUser.BusinessName,
+			Token:     token.Plaintext,
+			Email:     newVendorUser.User.Email,
+			ClientURL: app.cfg.clientURL,
+		}, nil)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
 		return
 	}
 
