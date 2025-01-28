@@ -157,7 +157,11 @@ func (app *application) routes() http.Handler {
 
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(app.requireAuthenicatedUser)
-			// r.Use(app.CheckPermissions(RequireRoles(store.AdminRole)))
+			r.Use(app.CheckPermissions(RequireRoles(store.AdminRole)))
+
+			r.Route("/members", func(r chi.Router) {
+				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelSuper))).Post("/", app.createAdmin)
+			})
 
 			r.Route("/users", func(r chi.Router) {
 				r.Get("/", app.getNormalUsers)
