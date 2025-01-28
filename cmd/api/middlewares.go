@@ -18,6 +18,7 @@ const authContextKey contextKey = "auth"
 func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract the token from the Authorization header or cookie
+		w.Header().Add("Vary", "Authorization")
 		token := extractToken(r, app)
 		if token == "" {
 			// Add the user to the request context

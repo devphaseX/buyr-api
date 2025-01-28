@@ -52,9 +52,9 @@ type User struct {
 	Role                 Role       `json:"role"`
 	EmailVerifiedAt      *time.Time `json:"email_verified_at"`
 	RecoveryCodes        []string   `json:"-"`
-	AuthSecret           string     `json:"auth_secret"`
+	AuthSecret           string     `json:"-"`
 	ForcePasswordChange  bool       `json:"force_password_change"`
-	TwoFactorAuthEnabled bool       `json:"two_factor_auth_enabled"`
+	TwoFactorAuthEnabled bool       `json:"-"`
 	IsActive             bool       `json:"is_active"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
@@ -126,13 +126,14 @@ type FlattenedUser struct {
 	Role                 Role       `json:"role"`
 	EmailVerifiedAt      *time.Time `json:"email_verified_at"`
 	AuthSecret           string     `json:"-"`
-	TwoFactorAuthEnabled bool       `json:"two_factor_auth_enabled"`
+	TwoFactorAuthEnabled bool       `json:"-"`
 	IsActive             bool       `json:"is_active"`
 	UserCreatedAt        time.Time  `json:"user_created_at"`
 	UserUpdatedAt        time.Time  `json:"user_updated_at"`
 
 	OriginalUserID string `json:"original_user_id"`
 
+	AdminLevel AdminLevel `json:"admin_level,omitempty"`
 	// Normal User fields
 	FirstName   string `json:"first_name,omitempty"`
 	LastName    string `json:"last_name,omitempty"`
@@ -215,6 +216,7 @@ func MarshalAdminUser(adminUser AdminUser) *FlattenedUser {
 
 		// User Type fields
 		OriginalUserID: adminUser.ID,
+		AdminLevel:     adminUser.AdminLevel,
 
 		// Admin User specific fields
 		FirstName: adminUser.FirstName,
@@ -281,7 +283,7 @@ type UserModel struct {
 }
 
 // NewUserModel creates a new UserModel instance.
-func NewUserModel(db *sql.DB) *UserModel {
+func NewUserModel(db *sql.DB) UserStorage {
 	return &UserModel{db}
 }
 

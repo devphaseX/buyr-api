@@ -19,12 +19,14 @@ var (
 type Storage struct {
 	Users    UserStorage
 	Sessions SessionStore
+	Category CategoryStore
 }
 
 func NewStorage(db *sql.DB) *Storage {
 	return &Storage{
 		Users:    NewUserModel(db),
 		Sessions: NewSessionModel(db),
+		Category: NewCategoryModel(db),
 	}
 }
 

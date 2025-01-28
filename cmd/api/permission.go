@@ -91,6 +91,22 @@ func RequireRoles(allowedRoles ...store.Role) PermissionCheck {
 	}
 }
 
+func RequireLevels(allowedLevels ...store.AdminLevel) PermissionCheck {
+	return func(a *AuthInfo) bool {
+		if a.IsAnonymous {
+			return false
+		}
+
+		for _, allowed := range allowedLevels {
+			if a.AdminUser.AdminLevel == allowed {
+				return true
+			}
+		}
+
+		return false
+	}
+}
+
 func (app *application) CheckPermissions(checks ...PermissionCheck) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

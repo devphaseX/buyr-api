@@ -115,6 +115,7 @@ func (app *application) routes() http.Handler {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/csrf-token", app.getCSRFToken)
+		r.Get("/categories", app.getPublicCategories)
 
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerNormalUser)
@@ -171,6 +172,12 @@ func (app *application) routes() http.Handler {
 			r.Route("/vendors", func(r chi.Router) {
 				r.Get("/", app.getVendorUsers)
 				r.Post("/", app.createVendor)
+			})
+
+			r.Route("/categories", func(r chi.Router) {
+				r.With(app.CheckPermissions(RequireLevels(store.AdminLevelSuper))).Post("/", app.createCategory)
+				r.Get("/", app.getAdminCategoriesView)
+				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelSuper))).Delete("/{id}", app.removeCategory)
 			})
 		})
 	})

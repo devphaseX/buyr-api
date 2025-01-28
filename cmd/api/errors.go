@@ -73,6 +73,23 @@ func (app *application) forbiddenResponse(w http.ResponseWriter, r *http.Request
 	app.errorResponse(w, http.StatusForbidden, message)
 }
 
+func (app *application) notFoundResponse(w http.ResponseWriter, r *http.Request, details ...string) {
+	// Log the forbidden error
+	app.logger.Errorw("not found attempt",
+		"method", r.Method,
+		"path", r.URL.Path,
+	)
+
+	// Determine the message to use
+	message := "the requested resource could not be found"
+	if len(details) > 0 && details[0] != "" {
+		message = details[0]
+	}
+
+	// Send the forbidden response
+	app.errorResponse(w, http.StatusNotFound, message)
+}
+
 func (app *application) invalidCredentialsResponse(w http.ResponseWriter, r *http.Request) {
 	// Log the failed sign-in attempt
 	app.logger.Infow("failed sign-in attempt", "method", r.Method, "path", r.URL.Path)
