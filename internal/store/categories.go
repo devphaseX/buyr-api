@@ -24,6 +24,7 @@ type CategoryStore interface {
 	RemoveByID(ctx context.Context, categoryID string) error
 	GetPublicCategorie(ctx context.Context, filter PaginateQueryFilter) ([]*Category, Metadata, error)
 	GetAdminCategoryView(ctx context.Context, filter PaginateQueryFilter) ([]*AdminCategoryView, Metadata, error)
+	SetCategoryVisibility(ctx context.Context, categoryID string, visibility bool) error
 }
 
 type CategoryModel struct {
@@ -143,8 +144,6 @@ func (m *CategoryModel) GetAdminCategoryView(ctx context.Context, filter Paginat
             admin_users au ON c.created_by_admin_id = au.id
         LEFT JOIN
             users u ON au.user_id = u.id
-        WHERE
-            c.visible = true
         ORDER BY
             %s %s
         LIMIT $1 OFFSET $2
@@ -274,6 +273,26 @@ func (m *CategoryModel) RemoveByID(ctx context.Context, categoryID string) error
 	}
 
 	if rows == 0 {
+		return ErrRecordNotFound
+	}
+
+	return nil
+}
+
+func (m *CategoryModel) SetCategoryVisibility(ctx context.Context, categoryID string, visibility bool) error {
+	query := `UPDATE category SET visible = $1 WHERE id = $2`
+
+	result, err := m.db.ExecContext(ctx, query, visibility, categoryID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
 		return ErrRecordNotFound
 	}
 

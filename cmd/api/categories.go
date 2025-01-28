@@ -119,3 +119,38 @@ func (app *application) removeCategory(w http.ResponseWriter, r *http.Request) {
 	app.successResponse(w, http.StatusOK, response)
 
 }
+
+type setCategoryVisibilityForm struct {
+	Visible bool `json:"visible"`
+}
+
+func (app *application) setCategoryVisibility(w http.ResponseWriter, r *http.Request) {
+	categoryId := app.readStringID(r, "id")
+
+	var form setCategoryVisibilityForm
+
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := app.store.Category.SetCategoryVisibility(r.Context(), categoryId, form.Visible); err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	response := envelope{
+		"message": "category visibility updated successfully",
+		"id":      categoryId,
+		"visible": form.Visible,
+	}
+
+	app.successResponse(w, http.StatusOK, response)
+
+}

@@ -177,7 +177,9 @@ func (app *application) routes() http.Handler {
 			r.Route("/categories", func(r chi.Router) {
 				r.With(app.CheckPermissions(RequireLevels(store.AdminLevelSuper))).Post("/", app.createCategory)
 				r.Get("/", app.getAdminCategoriesView)
-				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelSuper))).Delete("/{id}", app.removeCategory)
+				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelManager))).Delete("/{id}", app.removeCategory)
+
+				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelManager))).Put("/{id}/visibility", app.setCategoryVisibility)
 			})
 		})
 	})
