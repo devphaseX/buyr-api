@@ -164,7 +164,12 @@ func (app *application) routes() http.Handler {
 		})
 
 		r.Route("/products", func(r chi.Router) {
-			r.Post("/", app.createProduct)
+			r.With(app.CheckPermissions(RequireRoles(store.VendorRole))).Group(func(r chi.Router) {
+				r.Post("/", app.createProduct)
+				r.Patch("/{id}/publish", app.publishProduct)
+				r.Patch("/{id}/unpublish", app.unPublishProduct)
+			})
+
 		})
 
 		r.Route("/admin", func(r chi.Router) {
@@ -183,7 +188,6 @@ func (app *application) routes() http.Handler {
 			r.Route("/vendors", func(r chi.Router) {
 				r.Get("/", app.getVendorUsers)
 				r.Post("/", app.createVendor)
-
 			})
 
 			r.Route("/categories", func(r chi.Router) {

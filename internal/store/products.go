@@ -46,6 +46,8 @@ type ProductFeature struct {
 
 type ProductStore interface {
 	Create(ctx context.Context, product *Product) error
+	Publish(ctx context.Context, productID string, vendorID string) error
+	Unpublish(ctx context.Context, productID string, vendorID string) error
 }
 
 type ProductModel struct {
@@ -189,4 +191,53 @@ func (m *ProductModel) Create(ctx context.Context, product *Product) error {
 
 		return nil
 	})
+}
+
+func (m *ProductModel) Publish(ctx context.Context, productID string, vendorID string) error {
+	query := `UPDATE products SET published = true WHERE id = $1 AND vendor_id = $2`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	// Execute the query
+	result, err := m.db.ExecContext(ctx, query, productID, vendorID)
+	if err != nil {
+		return fmt.Errorf("failed to publish product: %w", err)
+	}
+
+	// Check if the product was actually updated
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+
+	return nil
+}
+
+func (m *ProductModel) Unpublish(ctx context.Context, productID string, vendorID string) error {
+	query := `UPDATE products SET published = false WHERE id = $1 AND vendor_id = $2`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+	// Execute the query
+	result, err := m.db.ExecContext(ctx, query, productID, vendorID)
+	if err != nil {
+		return fmt.Errorf("failed to unpublish product: %w", err)
+	}
+
+	// Check if the product was actually updated
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+
+	return nil
 }

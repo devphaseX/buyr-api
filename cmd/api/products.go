@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"time"
 
@@ -46,8 +46,6 @@ func (app *application) createProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := getUserFromCtx(r)
-
-	fmt.Println(user.User)
 
 	vendorUser, err := app.store.Users.GetVendorUserByID(r.Context(), user.ID)
 	if err != nil {
@@ -103,4 +101,58 @@ func (app *application) createProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.successResponse(w, http.StatusCreated, response)
+}
+
+func (app *application) publishProduct(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromCtx(r)
+	vendorUser, err := app.store.Users.GetVendorUserByID(r.Context(), user.ID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	productID := app.readStringID(r, "productID")
+	if err := app.store.Products.Publish(r.Context(), productID, vendorUser.ID); err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "product not found")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	response := envelope{
+		"message": "product published successfully",
+		"id":      productID,
+	}
+	// Return success response
+	app.successResponse(w, http.StatusOK, response)
+}
+
+func (app *application) unPublishProduct(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromCtx(r)
+	vendorUser, err := app.store.Users.GetVendorUserByID(r.Context(), user.ID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	productID := app.readStringID(r, "productID")
+	if err := app.store.Products.Unpublish(r.Context(), productID, vendorUser.ID); err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "product not found")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	response := envelope{
+		"message": "product unpublished successfully",
+		"id":      productID,
+	}
+	// Return success response
+	app.successResponse(w, http.StatusOK, response)
 }
