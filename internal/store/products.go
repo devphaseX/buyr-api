@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -17,6 +18,14 @@ var (
 	PendingProductStatus  ProductStatus = "pending"
 	ApprovedProductStatus ProductStatus = "approved"
 	RejectedProductStatus ProductStatus = "rejected"
+)
+
+type ProductFeatureView string
+
+var (
+	TableProductFeatureView  ProductFeatureView = "table"
+	ListProductFeatureView   ProductFeatureView = "list"
+	BulletProductFeatureView ProductFeatureView = "bullet"
 )
 
 type Product struct {
@@ -48,7 +57,7 @@ type ProductImage struct {
 type ProductFeature struct {
 	ID             string                 `json:"id"`
 	Title          string                 `json:"title"`
-	View           string                 `json:"view"`
+	View           ProductFeatureView     `json:"view"`
 	FeatureEntries map[string]interface{} `json:"feature_entries"`
 	ProductID      string                 `json:"product_id"`
 }
@@ -60,6 +69,7 @@ type ProductStore interface {
 	Reject(ctx context.Context, productID string) error
 	Approve(ctx context.Context, productID string) error
 	GetWithDetails(ctx context.Context, productID string) (*Product, error)
+	GetProducts(ctx context.Context, filter PaginateQueryFilter) ([]*Product, Metadata, error)
 }
 
 type ProductModel struct {
@@ -319,6 +329,7 @@ func (s *ProductModel) GetWithDetails(ctx context.Context, productID string) (*P
 					'id', pi.id,
 					'url', pi.url,
 					'is_primary', pi.is_primary,
+					'product_id', pi.product_id,
 					'created_at', pi.created_at,
 					'updated_at', pi.updated_at
 				))
@@ -331,6 +342,7 @@ func (s *ProductModel) GetWithDetails(ctx context.Context, productID string) (*P
 					'id', pf.id,
 					'title', pf.title,
 					'view', pf.view,
+					'product_id', pf.product_id,
 					'feature_entries', pf.feature_entries
 				))
 				FROM product_features pf
@@ -354,7 +366,12 @@ func (s *ProductModel) GetWithDetails(ctx context.Context, productID string) (*P
 		&product.VendorID, &product.CreatedAt, &product.UpdatedAt,
 		&imageJSON, &featureJSON)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan product details: %w", err)
+		switch {
+		case errors.Is(err, ErrRecordNotFound):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, fmt.Errorf("failed to scan product details: %w", err)
+		}
 	}
 	product.Images = parseImages(imageJSON)
 	product.Features = parseFeatures(featureJSON)
@@ -377,4 +394,98 @@ func parseFeatures(featuresJSON string) []*ProductFeature {
 		return nil // Handle error appropriately in production code
 	}
 	return features
+}
+
+func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilter) ([]*Product, Metadata, error) {
+	query := fmt.Sprintf(`
+		SELECT
+			count(p.id) OVER(),
+			p.id, p.name, p.description, p.stock_quantity, p.status,
+			p.discount, p.price, p.category_id, p.total_items_sold_count,
+			p.vendor_id, p.created_at, p.updated_at,
+			COALESCE(
+				(SELECT json_agg(DISTINCT jsonb_build_object(
+					'id', pi.id,
+					'url', pi.url,
+					'is_primary', pi.is_primary,
+					'product_id', pi.product_id,
+					'created_at', pi.created_at,
+					'updated_at', pi.updated_at
+				))
+				FROM product_images pi
+				WHERE pi.product_id = p.id),
+				'[]'
+			) AS images,
+			COALESCE(
+				(SELECT json_agg(DISTINCT jsonb_build_object(
+					'id', pf.id,
+					'title', pf.title,
+					'view', pf.view,
+					'product_id', pf.product_id,
+					'feature_entries', pf.feature_entries
+				))
+				FROM product_features pf
+				WHERE pf.product_id = p.id),
+				'[]'
+			) AS features
+		FROM products p
+		ORDER BY p.%s %s
+		LIMIT $1 OFFSET $2
+	`, filter.SortColumn(), filter.SortDirection())
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	rows, err := s.db.QueryContext(ctx, query, filter.Limit(), filter.Offset())
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("failed to query products: %w", err)
+	}
+	defer rows.Close()
+
+	var (
+		products     = []*Product{}
+		totalRecords int
+	)
+
+	for rows.Next() {
+		var (
+			product     = &Product{}
+			imageJSON   string
+			featureJSON string
+		)
+
+		err := rows.Scan(
+			&totalRecords,
+			&product.ID,
+			&product.Name,
+			&product.Description,
+			&product.StockQuantity,
+			&product.Status,
+			&product.Discount,
+			&product.Price,
+			&product.CategoryID,
+			&product.TotalItemsSoldCount,
+			&product.VendorID,
+			&product.CreatedAt,
+			&product.UpdatedAt,
+			&imageJSON,
+			&featureJSON,
+		)
+
+		if err != nil {
+			return nil, Metadata{}, fmt.Errorf("failed to scan product row: %w", err)
+		}
+
+		product.Images = parseImages(imageJSON)
+		product.Features = parseFeatures(featureJSON)
+		products = append(products, product)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, fmt.Errorf("error after iterating over product rows: %w", err)
+	}
+
+	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
+
+	return products, metadata, nil
 }

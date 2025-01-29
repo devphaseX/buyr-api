@@ -15,9 +15,9 @@ type CreateProductImageRequest struct {
 
 // Request struct for creating a product feature
 type CreateProductFeatureRequest struct {
-	Title          string                 `json:"title" validate:"required,max=255"`
-	View           string                 `json:"view" validate:"required,max=255"`
-	FeatureEntries map[string]interface{} `json:"feature_entries" validate:"required"`
+	Title          string                   `json:"title" validate:"required,max=255"`
+	View           store.ProductFeatureView `json:"view" validate:"required,max=255"`
+	FeatureEntries map[string]interface{}   `json:"feature_entries" validate:"required"`
 }
 
 type CreateProductRequest struct {
@@ -221,4 +221,30 @@ func (app *application) getProduct(w http.ResponseWriter, r *http.Request) {
 
 	// Return the response
 	app.successResponse(w, http.StatusOK, response)
+}
+
+func (app *application) getProducts(w http.ResponseWriter, r *http.Request) {
+	fq := store.PaginateQueryFilter{
+		Page:         1,
+		PageSize:     20,
+		Sort:         "created_at",
+		SortSafelist: []string{"created_at", "-created_at"},
+	}
+
+	if err := fq.Parse(r); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	products, metadata, err := app.store.Products.GetProducts(r.Context(), fq)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.successResponse(w, http.StatusOK, envelope{
+		"products": products,
+		"metadata": metadata,
+	})
 }
