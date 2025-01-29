@@ -89,3 +89,39 @@ func (app *application) getProductReviews(w http.ResponseWriter, r *http.Request
 
 	app.successResponse(w, http.StatusOK, response)
 }
+
+func (app *application) removeReview(w http.ResponseWriter, r *http.Request) {
+	productID := app.readStringID(r, "productID")
+	reviewID := app.readStringID(r, "reviewID")
+
+	product, err := app.store.Products.GetProductByID(r.Context(), productID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "product not found")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	err = app.store.Reviews.Delete(r.Context(), product.ID, reviewID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "product not found")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	response := envelope{
+		"message": "review deleted successfully",
+		"id":      reviewID,
+	}
+
+	app.successResponse(w, http.StatusOK, response)
+}

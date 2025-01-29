@@ -163,6 +163,18 @@ func (app *application) routes() http.Handler {
 
 		})
 
+		r.Route("/carts", func(r chi.Router) {
+			r.Use(app.requireAuthenicatedUser)
+			r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
+				r.Get("/", app.getCurrentUserCart)
+				r.Get("/items", app.getCartItems)
+				r.Post("/items", app.addCardItem)
+				r.Get("/items/{cardItemID}", app.getCartByID)
+				r.Delete("/items/{itemID}", app.removeCartItem)
+
+			})
+		})
+
 		r.Route("/products", func(r chi.Router) {
 			r.Get("/", app.getProducts)
 
@@ -194,13 +206,21 @@ func (app *application) routes() http.Handler {
 
 		})
 
-		r.Route("/admin", func(r chi.Router) {
+		r.Route("/admins", func(r chi.Router) {
 			r.Use(app.requireAuthenicatedUser)
 			r.Use(app.CheckPermissions(RequireRoles(store.AdminRole)))
 
 			r.Route("/members", func(r chi.Router) {
 				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelSuper))).Post("/", app.createAdmin)
 				r.Get("/", app.getAdminUsers)
+			})
+
+			r.Route("/products", func(r chi.Router) {
+				r.Route("/{productID}", func(r chi.Router) {
+					r.Route("/reviews", func(r chi.Router) {
+						r.Delete("/{reviewID}", app.removeReview)
+					})
+				})
 			})
 
 			r.Route("/users", func(r chi.Router) {
