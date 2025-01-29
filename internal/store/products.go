@@ -11,13 +11,22 @@ import (
 	"github.com/devphaseX/buyr-api.git/internal/db"
 )
 
+type ProductStatus string
+
+var (
+	PendingProductStatus  ProductStatus = "pending"
+	ApprovedProductStatus ProductStatus = "approved"
+	RejectedProductStatus ProductStatus = "rejected"
+)
+
 type Product struct {
 	ID                  string            `json:"id"`
 	Name                string            `json:"name"`
 	Description         string            `json:"description"`
 	Images              []*ProductImage   `json:"images"`
-	Featues             []*ProductFeature `json:"features"`
+	Features            []*ProductFeature `json:"features"`
 	StockQuantity       int               `json:"stock_quantity"`
+	Status              ProductStatus     `json:"status"`
 	TotalItemsSoldCount int               `json:"total_items_sold_count"`
 	VendorID            string            `json:"vendor_id"`
 	Discount            float64           `json:"discount"`
@@ -48,6 +57,9 @@ type ProductStore interface {
 	Create(ctx context.Context, product *Product) error
 	Publish(ctx context.Context, productID string, vendorID string) error
 	Unpublish(ctx context.Context, productID string, vendorID string) error
+	Reject(ctx context.Context, productID string) error
+	Approve(ctx context.Context, productID string) error
+	GetWithDetails(ctx context.Context, productID string) (*Product, error)
 }
 
 type ProductModel struct {
@@ -185,7 +197,7 @@ func (m *ProductModel) Create(ctx context.Context, product *Product) error {
 			return err
 		}
 
-		if err := createProductFeatures(ctx, tx, product.ID, product.Featues); err != nil {
+		if err := createProductFeatures(ctx, tx, product.ID, product.Features); err != nil {
 			return err
 		}
 
@@ -240,4 +252,129 @@ func (m *ProductModel) Unpublish(ctx context.Context, productID string, vendorID
 	}
 
 	return nil
+}
+
+func (m *ProductModel) Reject(ctx context.Context, productID string) error {
+	query := `
+		UPDATE products
+		SET status = $1, published = $2
+		WHERE id = $4 AND status = $5
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	updatedAt := time.Now()
+	result, err := m.db.ExecContext(ctx, query, RejectedProductStatus, false, updatedAt, productID, PendingProductStatus)
+	if err != nil {
+		return fmt.Errorf("failed to reject product: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+
+	return nil
+}
+
+func (m *ProductModel) Approve(ctx context.Context, productID string) error {
+	query := `
+		UPDATE products
+		SET status = $1
+		WHERE id = $3 AND status = $4
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	updatedAt := time.Now()
+	result, err := m.db.ExecContext(ctx, query, ApprovedProductStatus, updatedAt, productID, PendingProductStatus)
+	if err != nil {
+		return fmt.Errorf("failed to approve product: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+
+	return nil
+}
+func (s *ProductModel) GetWithDetails(ctx context.Context, productID string) (*Product, error) {
+	query := `
+		SELECT
+			p.id, p.name, p.description, p.stock_quantity, p.status, p.discount, p.price, p.category_id,
+			p.total_items_sold_count, p.vendor_id, p.created_at, p.updated_at,
+			COALESCE(
+				(SELECT json_agg(DISTINCT jsonb_build_object(
+					'id', pi.id,
+					'url', pi.url,
+					'is_primary', pi.is_primary,
+					'created_at', pi.created_at,
+					'updated_at', pi.updated_at
+				))
+				FROM product_images pi
+				WHERE pi.product_id = p.id),
+				'[]'
+			) AS images,
+			COALESCE(
+				(SELECT json_agg(DISTINCT jsonb_build_object(
+					'id', pf.id,
+					'title', pf.title,
+					'view', pf.view,
+					'feature_entries', pf.feature_entries
+				))
+				FROM product_features pf
+				WHERE pf.product_id = p.id),
+				'[]'
+			) AS features
+		FROM
+			products p
+		WHERE
+			p.id = $1;
+	`
+	row := s.db.QueryRowContext(ctx, query, productID)
+	var (
+		product     = &Product{}
+		imageJSON   string
+		featureJSON string
+	)
+	err := row.Scan(&product.ID, &product.Name, &product.Description,
+		&product.StockQuantity, &product.Status, &product.Discount, &product.Price,
+		&product.CategoryID, &product.TotalItemsSoldCount,
+		&product.VendorID, &product.CreatedAt, &product.UpdatedAt,
+		&imageJSON, &featureJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan product details: %w", err)
+	}
+	product.Images = parseImages(imageJSON)
+	product.Features = parseFeatures(featureJSON)
+	return product, nil
+}
+
+// Helper function to parse images from JSON string
+func parseImages(imagesJSON string) []*ProductImage {
+	var images []*ProductImage
+	if err := json.Unmarshal([]byte(imagesJSON), &images); err != nil {
+		return nil
+	}
+	return images
+}
+
+// Helper function to parse features from JSON string
+func parseFeatures(featuresJSON string) []*ProductFeature {
+	var features []*ProductFeature
+	if err := json.Unmarshal([]byte(featuresJSON), &features); err != nil {
+		return nil // Handle error appropriately in production code
+	}
+	return features
 }

@@ -170,6 +170,8 @@ func (app *application) routes() http.Handler {
 				r.Patch("/{id}/unpublish", app.unPublishProduct)
 			})
 
+			r.Get("/{productID}", app.getProduct)
+
 		})
 
 		r.Route("/admin", func(r chi.Router) {

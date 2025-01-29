@@ -89,7 +89,7 @@ func (app *application) createProduct(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	product.Featues = productFeatures
+	product.Features = productFeatures
 
 	if err := app.store.Products.Create(r.Context(), product); err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -154,5 +154,71 @@ func (app *application) unPublishProduct(w http.ResponseWriter, r *http.Request)
 		"id":      productID,
 	}
 	// Return success response
+	app.successResponse(w, http.StatusOK, response)
+}
+
+func (app *application) approveProduct(w http.ResponseWriter, r *http.Request) {
+	productID := app.readStringID(r, "productID")
+
+	if err := app.store.Products.Approve(r.Context(), productID); err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "product not found")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	response := envelope{
+		"message": "product unpublished successfully",
+		"id":      productID,
+	}
+	// Return success response
+	app.successResponse(w, http.StatusOK, response)
+}
+
+func (app *application) rejectProduct(w http.ResponseWriter, r *http.Request) {
+	productID := app.readStringID(r, "productID")
+
+	if err := app.store.Products.Reject(r.Context(), productID); err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "product not found")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	response := envelope{
+		"message": "product unpublished successfully",
+		"id":      productID,
+	}
+	// Return success response
+	app.successResponse(w, http.StatusOK, response)
+}
+
+func (app *application) getProduct(w http.ResponseWriter, r *http.Request) {
+	productID := app.readStringID(r, "productID")
+
+	// Fetch the product, images, and features using a single query with LEFT JOIN
+	product, err := app.store.Products.GetWithDetails(r.Context(), productID)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "product not found")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	// Construct the final response
+	response := envelope{
+		"product": product,
+	}
+
+	// Return the response
 	app.successResponse(w, http.StatusOK, response)
 }
