@@ -12,7 +12,7 @@ type createCommentRequest struct {
 	Comment string `json:"comment" validate:"required,max=500"`
 }
 
-func (app *application) createComment(w http.ResponseWriter, r *http.Request) {
+func (app *application) createReview(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromCtx(r)
 	productID := app.readStringID(r, "productID")
 

@@ -17,24 +17,26 @@ var (
 )
 
 type Storage struct {
-	Users     UserStorage
-	Sessions  SessionStore
-	Category  CategoryStore
-	Products  ProductStore
-	Reviews   ReviewStore
-	Carts     CartStore
-	CartItems CartItemStore
+	Users      UserStorage
+	Sessions   SessionStore
+	Category   CategoryStore
+	Products   ProductStore
+	Reviews    ReviewStore
+	Carts      CartStore
+	CartItems  CartItemStore
+	Whitelists WhitelistStore
 }
 
 func NewStorage(db *sql.DB) *Storage {
 	return &Storage{
-		Users:     NewUserModel(db),
-		Sessions:  NewSessionModel(db),
-		Category:  NewCategoryModel(db),
-		Products:  NewProductModel(db),
-		Reviews:   NewReviewModel(db),
-		Carts:     NewCartModel(db),
-		CartItems: NewCartItemModel(db),
+		Users:      NewUserModel(db),
+		Sessions:   NewSessionModel(db),
+		Category:   NewCategoryModel(db),
+		Products:   NewProductModel(db),
+		Reviews:    NewReviewModel(db),
+		Carts:      NewCartModel(db),
+		CartItems:  NewCartItemModel(db),
+		Whitelists: NewWhitelistModel(db),
 	}
 }
 
