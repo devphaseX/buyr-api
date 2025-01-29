@@ -908,6 +908,8 @@ func (u *UserModel) GetNormalUsers(ctx context.Context, filter PaginateQueryFilt
 		totalRecords int
 	)
 
+	defer rows.Close()
+
 	for rows.Next() {
 
 		normalUser := &NormalUser{}
@@ -956,6 +958,10 @@ func (u *UserModel) GetNormalUsers(ctx context.Context, filter PaginateQueryFilt
 		users = append(users, normalUser)
 	}
 
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, err
+	}
+
 	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
 
 	return users, metadata, nil
@@ -986,6 +992,8 @@ func (u *UserModel) GetVendorUsers(ctx context.Context, filter PaginateQueryFilt
 		users        = []*VendorUser{}
 		totalRecords int
 	)
+
+	defer rows.Close()
 
 	for rows.Next() {
 		vendorUser := &VendorUser{}
@@ -1054,6 +1062,10 @@ func (u *UserModel) GetVendorUsers(ctx context.Context, filter PaginateQueryFilt
 		users = append(users, vendorUser)
 	}
 
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, err
+	}
+
 	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
 	return users, metadata, nil
 }
@@ -1082,6 +1094,8 @@ func (u *UserModel) GetAdminUsers(ctx context.Context, filter PaginateQueryFilte
 		users        = []*AdminUser{}
 		totalRecords int
 	)
+
+	defer rows.Close()
 
 	for rows.Next() {
 		adminUser := &AdminUser{}
@@ -1134,6 +1148,10 @@ func (u *UserModel) GetAdminUsers(ctx context.Context, filter PaginateQueryFilte
 			user.AuthSecret = authSecret.String
 		}
 		users = append(users, adminUser)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, err
 	}
 
 	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)

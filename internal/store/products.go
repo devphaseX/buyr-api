@@ -1,19 +1,30 @@
 package store
 
-import "time"
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/devphaseX/buyr-api.git/internal/db"
+)
 
 type Product struct {
-	ID                  string    `json:"id"`
-	Name                string    `json:"name"`
-	Description         string    `json:"description"`
-	StockQuantity       int       `json:"stock_quantity"`
-	TotalItemsSoldCount int       `json:"total_items_sold_count"`
-	VendorID            string    `json:"vendor_id"`
-	Discount            float64   `json:"discount"`
-	Price               float64   `json:"price"`
-	CategoryID          string    `json:"category_id"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	Description         string            `json:"description"`
+	Images              []*ProductImage   `json:"images"`
+	Featues             []*ProductFeature `json:"features"`
+	StockQuantity       int               `json:"stock_quantity"`
+	TotalItemsSoldCount int               `json:"total_items_sold_count"`
+	VendorID            string            `json:"vendor_id"`
+	Discount            float64           `json:"discount"`
+	Price               float64           `json:"price"`
+	CategoryID          string            `json:"category_id"`
+	CreatedAt           time.Time         `json:"created_at"`
+	UpdatedAt           time.Time         `json:"updated_at"`
 }
 
 type ProductImage struct {
@@ -31,4 +42,151 @@ type ProductFeature struct {
 	View           string                 `json:"view"`
 	FeatureEntries map[string]interface{} `json:"feature_entries"`
 	ProductID      string                 `json:"product_id"`
+}
+
+type ProductStore interface {
+	Create(ctx context.Context, product *Product) error
+}
+
+type ProductModel struct {
+	db *sql.DB
+}
+
+func NewProductModel(db *sql.DB) ProductStore {
+	return &ProductModel{db}
+}
+
+func create(ctx context.Context, tx *sql.Tx, product *Product) error {
+	query := `INSERT INTO products(id, name, description,
+			 stock_quantity, total_items_sold_count, vendor_id,
+			 discount, price, category_id) 	VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 RETURNING id, created_at, updated_at
+				`
+	id := db.GenerateULID()
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	args := []any{id, product.Name, product.Description, product.StockQuantity,
+		product.TotalItemsSoldCount, product.VendorID, product.Discount, product.Price, product.CategoryID}
+
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&product.ID, &product.CreatedAt, &product.UpdatedAt)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func createProductImages(ctx context.Context, tx *sql.Tx, productID string, images []*ProductImage) error {
+	query := `INSERT INTO product_images(id, product_id, url, is_primary)
+				  VALUES ($1, $2, $3, $4) RETURNING id, created_at, updated_at`
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+	var wg sync.WaitGroup
+
+	errCh := make(chan error, len(images))
+
+	for _, image := range images {
+		wg.Add(1)
+
+		go func(img *ProductImage) {
+			defer wg.Done()
+
+			id := db.GenerateULID()
+			img.ProductID = productID
+
+			args := []any{id, img.ProductID, img.URL, img.IsPrimary}
+
+			err := tx.QueryRowContext(ctx, query, args...).Scan(&img.ID, &img.CreatedAt, &img.UpdatedAt)
+
+			if err != nil {
+				errCh <- err
+				return
+			}
+
+		}(image)
+	}
+
+	wg.Wait()
+
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func createProductFeatures(ctx context.Context, tx *sql.Tx, productID string, features []*ProductFeature) error {
+	query := `INSERT INTO product_features(id, title, view, feature_entries, product_id)
+				  VALUES ($1, $2, $3, $4, $5)`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	errCh := make(chan error, len(features))
+
+	for _, feature := range features {
+		wg.Add(1)
+		go func(feat *ProductFeature) {
+			defer wg.Done()
+
+			feat.ID = db.GenerateULID()
+			feat.ProductID = productID
+
+			featureEntriesJSON, err := json.Marshal(feat.FeatureEntries)
+
+			if err != nil {
+				errCh <- fmt.Errorf("failed to serialize feature entries: %w", err)
+				return
+			}
+
+			args := []any{feat.ID, feat.Title, feat.View, featureEntriesJSON, feat.ProductID}
+
+			_, err = tx.ExecContext(ctx, query, args...)
+
+			if err != nil {
+				errCh <- err
+				return
+			}
+		}(feature)
+	}
+
+	wg.Wait()
+
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+
+	}
+	return nil
+}
+
+func (m *ProductModel) Create(ctx context.Context, product *Product) error {
+	return withTrx(m.db, ctx, func(tx *sql.Tx) error {
+		if err := create(ctx, tx, product); err != nil {
+			return err
+		}
+
+		if err := createProductImages(ctx, tx, product.ID, product.Images); err != nil {
+			return err
+		}
+
+		if err := createProductFeatures(ctx, tx, product.ID, product.Featues); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }

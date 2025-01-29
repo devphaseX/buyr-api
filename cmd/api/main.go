@@ -104,7 +104,11 @@ func main() {
 	}
 
 	formDecoder := form.NewDecoder()
-	fileobject, err := fileobject.NewSupabaseStorage(cfg.supabaseConfig.apiURL, cfg.supabaseConfig.apiKey)
+	// fileobject, err := fileobject.NewSupabaseStorage(cfg.supabaseConfig.apiURL, cfg.supabaseConfig.apiKey)
+
+	fileobject := &fileobject.FileSystemStorage{
+		BasePath: "./static",
+	}
 
 	if err != nil {
 		logger.Panic(err)

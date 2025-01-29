@@ -77,7 +77,7 @@ func (app *application) createVendor(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		photoURL, err = app.fileobject.UploadFile(r.Context(), app.cfg.supabaseConfig.profileImageBucketName, photoHeader.Filename, photo)
+		photoURL, err = app.fileobject.UploadFile(r.Context(), "images", photoHeader.Filename, photo)
 
 		if err != nil {
 			app.serverErrorResponse(w, r, err)

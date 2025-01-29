@@ -82,6 +82,8 @@ func (m *CategoryModel) GetPublicCategorie(ctx context.Context, filter PaginateQ
 		return nil, Metadata{}, err
 	}
 
+	defer rows.Close()
+
 	for rows.Next() {
 		category := &Category{}
 
@@ -99,6 +101,10 @@ func (m *CategoryModel) GetPublicCategorie(ctx context.Context, filter PaginateQ
 		}
 
 		categories = append(categories, category)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, err
 	}
 
 	metadata := calculateMetadata(totalRecord, filter.Page, filter.PageSize)

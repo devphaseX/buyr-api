@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -111,11 +112,13 @@ func (app *application) routes() http.Handler {
 	r.Use(app.AuthMiddleware)
 	r.Use(app.loadCSRF)
 
-	//roles
-
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/csrf-token", app.getCSRFToken)
 		r.Get("/categories", app.getPublicCategories)
+
+		workDir, _ := os.Getwd()
+		filesDir := http.Dir(filepath.Join(workDir, "static"))
+		FileServer(r, "/static", filesDir)
 
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerNormalUser)
@@ -143,6 +146,10 @@ func (app *application) routes() http.Handler {
 
 		})
 
+		r.Route("/files", func(r chi.Router) {
+			r.Post("/image", app.uploadImage)
+		})
+
 		r.Route("/mfa", func(r chi.Router) {
 			r.Use(app.requireAuthenicatedUser)
 			r.With(app.CheckPermissions(RequireRoles(store.AdminRole, store.VendorRole))).Group(
@@ -154,6 +161,10 @@ func (app *application) routes() http.Handler {
 				},
 			)
 
+		})
+
+		r.Route("/products", func(r chi.Router) {
+			r.Post("/", app.createProduct)
 		})
 
 		r.Route("/admin", func(r chi.Router) {
@@ -172,6 +183,7 @@ func (app *application) routes() http.Handler {
 			r.Route("/vendors", func(r chi.Router) {
 				r.Get("/", app.getVendorUsers)
 				r.Post("/", app.createVendor)
+
 			})
 
 			r.Route("/categories", func(r chi.Router) {
