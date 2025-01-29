@@ -33,9 +33,10 @@ type Product struct {
 	Name                string            `json:"name"`
 	Description         string            `json:"description"`
 	Images              []*ProductImage   `json:"images"`
-	Features            []*ProductFeature `json:"features"`
+	Features            []*ProductFeature `json:"features,omitempty"`
 	StockQuantity       int               `json:"stock_quantity"`
 	Status              ProductStatus     `json:"status"`
+	Published           bool              `json:"published"`
 	TotalItemsSoldCount int               `json:"total_items_sold_count"`
 	VendorID            string            `json:"vendor_id"`
 	Discount            float64           `json:"discount"`
@@ -69,6 +70,7 @@ type ProductStore interface {
 	Reject(ctx context.Context, productID string) error
 	Approve(ctx context.Context, productID string) error
 	GetWithDetails(ctx context.Context, productID string) (*Product, error)
+	GetProductByID(ctx context.Context, productID string) (*Product, error)
 	GetProducts(ctx context.Context, filter PaginateQueryFilter) ([]*Product, Metadata, error)
 }
 
@@ -82,7 +84,7 @@ func NewProductModel(db *sql.DB) ProductStore {
 
 func create(ctx context.Context, tx *sql.Tx, product *Product) error {
 	query := `INSERT INTO products(id, name, description,
-			 stock_quantity, total_items_sold_count, vendor_id,
+			 stock_quantity, total_items_sold_count, status, published, vendor_id,
 			 discount, price, category_id) 	VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			 RETURNING id, created_at, updated_at
 				`
@@ -92,7 +94,8 @@ func create(ctx context.Context, tx *sql.Tx, product *Product) error {
 	defer cancel()
 
 	args := []any{id, product.Name, product.Description, product.StockQuantity,
-		product.TotalItemsSoldCount, product.VendorID, product.Discount, product.Price, product.CategoryID}
+		product.TotalItemsSoldCount, product.Status, product.Published, product.VendorID,
+		product.Discount, product.Price, product.CategoryID}
 
 	err := tx.QueryRowContext(ctx, query, args...).Scan(&product.ID, &product.CreatedAt, &product.UpdatedAt)
 
@@ -322,7 +325,7 @@ func (m *ProductModel) Approve(ctx context.Context, productID string) error {
 func (s *ProductModel) GetWithDetails(ctx context.Context, productID string) (*Product, error) {
 	query := `
 		SELECT
-			p.id, p.name, p.description, p.stock_quantity, p.status, p.discount, p.price, p.category_id,
+			p.id, p.name, p.description, p.stock_quantity, p.status, p.published, p.discount, p.price, p.category_id,
 			p.total_items_sold_count, p.vendor_id, p.created_at, p.updated_at,
 			COALESCE(
 				(SELECT json_agg(DISTINCT jsonb_build_object(
@@ -361,7 +364,7 @@ func (s *ProductModel) GetWithDetails(ctx context.Context, productID string) (*P
 		featureJSON string
 	)
 	err := row.Scan(&product.ID, &product.Name, &product.Description,
-		&product.StockQuantity, &product.Status, &product.Discount, &product.Price,
+		&product.StockQuantity, &product.Status, &product.Published, &product.Discount, &product.Price,
 		&product.CategoryID, &product.TotalItemsSoldCount,
 		&product.VendorID, &product.CreatedAt, &product.UpdatedAt,
 		&imageJSON, &featureJSON)
@@ -400,7 +403,7 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 	query := fmt.Sprintf(`
 		SELECT
 			count(p.id) OVER(),
-			p.id, p.name, p.description, p.stock_quantity, p.status,
+			p.id, p.name, p.description, p.stock_quantity, p.status, p.published,
 			p.discount, p.price, p.category_id, p.total_items_sold_count,
 			p.vendor_id, p.created_at, p.updated_at,
 			COALESCE(
@@ -413,21 +416,9 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 					'updated_at', pi.updated_at
 				))
 				FROM product_images pi
-				WHERE pi.product_id = p.id),
+				WHERE pi.product_id = p.id and pi.is_primary = true),
 				'[]'
-			) AS images,
-			COALESCE(
-				(SELECT json_agg(DISTINCT jsonb_build_object(
-					'id', pf.id,
-					'title', pf.title,
-					'view', pf.view,
-					'product_id', pf.product_id,
-					'feature_entries', pf.feature_entries
-				))
-				FROM product_features pf
-				WHERE pf.product_id = p.id),
-				'[]'
-			) AS features
+			) AS images
 		FROM products p
 		ORDER BY p.%s %s
 		LIMIT $1 OFFSET $2
@@ -449,9 +440,8 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 
 	for rows.Next() {
 		var (
-			product     = &Product{}
-			imageJSON   string
-			featureJSON string
+			product   = &Product{}
+			imageJSON string
 		)
 
 		err := rows.Scan(
@@ -461,6 +451,7 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 			&product.Description,
 			&product.StockQuantity,
 			&product.Status,
+			&product.Published,
 			&product.Discount,
 			&product.Price,
 			&product.CategoryID,
@@ -469,7 +460,6 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 			&product.CreatedAt,
 			&product.UpdatedAt,
 			&imageJSON,
-			&featureJSON,
 		)
 
 		if err != nil {
@@ -477,7 +467,6 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 		}
 
 		product.Images = parseImages(imageJSON)
-		product.Features = parseFeatures(featureJSON)
 		products = append(products, product)
 	}
 
@@ -488,4 +477,31 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
 
 	return products, metadata, nil
+}
+
+func (m *ProductModel) GetProductByID(ctx context.Context, productID string) (*Product, error) {
+	query := `SELECT id, name, description, stock_quantity, status, published, total_items_sold_count,vendor_id,
+			 discount,  price,category_id, created_at, updated_at  FROM products WHERE id = $1`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	product := &Product{}
+
+	err := m.db.QueryRowContext(ctx, query, productID).Scan(&product.ID, &product.Name, &product.Description,
+		&product.StockQuantity, &product.Status, &product.Published,
+		&product.TotalItemsSoldCount, &product.VendorID, &product.Discount, &product.Price,
+		&product.CategoryID, &product.CreatedAt, &product.UpdatedAt)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+
+		default:
+			return nil, err
+		}
+	}
+
+	return product, nil
 }

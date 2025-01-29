@@ -214,9 +214,41 @@ func (app *application) getProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	vendorUser, err := app.store.Users.GetVendorByID(r.Context(), product.VendorID)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	vendorClientView := struct {
+		ID              string    `json:"id"`
+		BusinessName    string    `json:"business_name"`
+		BusinessAddress string    `json:"business_address"`
+		ContactNumber   string    `json:"contact_number"`
+		AvatarURL       string    `json:"avatar_url"`
+		UserID          string    `json:"user_id"`
+		City            string    `json:"city"`
+		Country         string    `json:"country"`
+		CreatedAt       time.Time `json:"created_at"`
+		UpdatedAt       time.Time `json:"updated_at"`
+	}{
+		ID:              vendorUser.ID,
+		BusinessName:    vendorUser.BusinessName,
+		BusinessAddress: vendorUser.BusinessAddress,
+		ContactNumber:   vendorUser.ContactNumber,
+		UserID:          vendorUser.UserID,
+		AvatarURL:       vendorUser.User.AvatarURL,
+		City:            vendorUser.City,
+		Country:         vendorUser.Country,
+		CreatedAt:       vendorUser.CreatedAt,
+		UpdatedAt:       vendorUser.UpdatedAt,
+	}
+
 	// Construct the final response
 	response := envelope{
 		"product": product,
+		"vendor":  vendorClientView,
 	}
 
 	// Return the response

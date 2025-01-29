@@ -21,6 +21,7 @@ type Storage struct {
 	Sessions SessionStore
 	Category CategoryStore
 	Products ProductStore
+	Reviews  ReviewStore
 }
 
 func NewStorage(db *sql.DB) *Storage {
@@ -29,6 +30,7 @@ func NewStorage(db *sql.DB) *Storage {
 		Sessions: NewSessionModel(db),
 		Category: NewCategoryModel(db),
 		Products: NewProductModel(db),
+		Reviews:  NewReviewModel(db),
 	}
 }
 

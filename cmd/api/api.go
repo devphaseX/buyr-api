@@ -165,12 +165,31 @@ func (app *application) routes() http.Handler {
 
 		r.Route("/products", func(r chi.Router) {
 			r.Get("/", app.getProducts)
-			r.Get("/{productID}", app.getProduct)
 
-			r.With(app.CheckPermissions(RequireRoles(store.VendorRole))).Group(func(r chi.Router) {
-				r.Post("/", app.createProduct)
-				r.Patch("/{id}/publish", app.publishProduct)
-				r.Patch("/{id}/unpublish", app.unPublishProduct)
+			r.Route("/{productID}", func(r chi.Router) {
+				r.Get("/", app.getProduct)
+				r.Route("/reviews", func(r chi.Router) {
+					r.Get("/", app.getProductReviews)
+
+					r.With(app.requireAuthenicatedUser).Group(func(r chi.Router) {
+						r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Post("/", app.createComment)
+					})
+				})
+			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(app.requireAuthenicatedUser)
+
+				r.With(app.CheckPermissions(RequireRoles(store.VendorRole))).Group(func(r chi.Router) {
+					r.Post("/", app.createProduct)
+					r.Patch("/{id}/publish", app.publishProduct)
+					r.Patch("/{id}/unpublish", app.unPublishProduct)
+				})
+
+				r.With(app.CheckPermissions(RequireLevels(store.AdminLevelManager))).Group(func(r chi.Router) {
+					r.Patch("/{id}/approve", app.approveProduct)
+					r.Patch("/{id}/reject", app.rejectProduct)
+				})
 			})
 
 		})

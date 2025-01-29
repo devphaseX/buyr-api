@@ -270,6 +270,9 @@ type UserStorage interface {
 	GetVendorUserByID(ctx context.Context, userID string) (*VendorUser, error)
 	GetAdminUserByID(ctx context.Context, userID string) (*AdminUser, error)
 	GetNormalUserByID(ctx context.Context, userID string) (*NormalUser, error)
+
+	GetVendorByID(ctx context.Context, userID string) (*VendorUser, error)
+
 	FlattenUser(ctx context.Context, user *User) (*FlattenedUser, error)
 	ResetRecoveryCodes(context.Context, string, []string) error
 	GetNormalUsers(ctx context.Context, filter PaginateQueryFilter) ([]*NormalUser, Metadata, error)
@@ -754,7 +757,7 @@ func (s *UserModel) GetAdminUserByID(ctx context.Context, userID string) (*Admin
 
 func (s *UserModel) GetVendorUserByID(ctx context.Context, userID string) (*VendorUser, error) {
 	query := `
-		SELECT v.id, v.business_name, v.business_address, v.contact_number, v.user_id, v.created_by_admin_id,
+		SELECT v.id, v.business_name, v.business_address, v.contact_number, v.city, v.country, v.user_id, v.created_by_admin_id,
 			   v.approved_at, v.suspended_at, v.created_at, v.updated_at,
 			   u.id, u.email, u.password_hash, u.avatar_url, u.role, u.email_verified_at,
 			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
@@ -778,6 +781,93 @@ func (s *UserModel) GetVendorUserByID(ctx context.Context, userID string) (*Vend
 		&vendorUser.BusinessName,
 		&vendorUser.BusinessAddress,
 		&vendorUser.ContactNumber,
+		&vendorUser.City,
+		&vendorUser.Country,
+		&vendorUser.UserID,
+		&vendorUser.CreatedByAdminID,
+		&approvedAt,
+		&suspendedAt,
+		&vendorUser.CreatedAt,
+		&vendorUser.UpdatedAt,
+		&user.ID,
+		&user.Email,
+		&user.Password.hash,
+		&avatarURL,
+		&user.Role,
+		&emailVerifiedAt,
+		&isActive,
+		&user.TwoFactorAuthEnabled,
+		&authSecret,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	if emailVerifiedAt.Valid {
+		user.EmailVerifiedAt = &emailVerifiedAt.Time
+	}
+
+	if avatarURL.Valid {
+		user.AvatarURL = avatarURL.String
+	}
+
+	if isActive.Valid {
+		user.IsActive = isActive.Bool
+	}
+
+	if authSecret.Valid {
+		user.AuthSecret = authSecret.String
+	}
+
+	if approvedAt.Valid {
+		vendorUser.ApprovedAt = &approvedAt.Time
+	}
+
+	if suspendedAt.Valid {
+		vendorUser.SuspendedAt = &suspendedAt.Time
+	}
+
+	vendorUser.User = *user
+
+	return vendorUser, nil
+}
+
+func (u *UserModel) GetVendorByID(ctx context.Context, ID string) (*VendorUser, error) {
+	query := `
+		SELECT v.id, v.business_name, v.business_address, v.contact_number, v.city, v.country, v.user_id, v.created_by_admin_id,
+			   v.approved_at, v.suspended_at, v.created_at, v.updated_at,
+			   u.id, u.email, u.password_hash, u.avatar_url, u.role, u.email_verified_at,
+			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
+		FROM vendor_users v
+		JOIN users u ON u.id = v.user_id
+		WHERE v.id = $1
+	`
+
+	vendorUser := &VendorUser{}
+	user := &User{}
+
+	var emailVerifiedAt sql.NullTime
+	var avatarURL sql.NullString
+	var isActive sql.NullBool
+	var authSecret sql.NullString
+	var approvedAt sql.NullTime
+	var suspendedAt sql.NullTime
+
+	err := u.db.QueryRowContext(ctx, query, ID).Scan(
+		&vendorUser.ID,
+		&vendorUser.BusinessName,
+		&vendorUser.BusinessAddress,
+		&vendorUser.ContactNumber,
+		&vendorUser.City,
+		&vendorUser.Country,
 		&vendorUser.UserID,
 		&vendorUser.CreatedByAdminID,
 		&approvedAt,
