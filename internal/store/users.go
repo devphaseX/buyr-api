@@ -271,7 +271,7 @@ type UserStorage interface {
 	GetAdminUserByID(ctx context.Context, userID string) (*AdminUser, error)
 	GetNormalUserByID(ctx context.Context, userID string) (*NormalUser, error)
 
-	GetVendorByID(ctx context.Context, userID string) (*VendorUser, error)
+	GetVendorByID(ctx context.Context, ID string) (*VendorUser, error)
 
 	FlattenUser(ctx context.Context, user *User) (*FlattenedUser, error)
 	ResetRecoveryCodes(context.Context, string, []string) error

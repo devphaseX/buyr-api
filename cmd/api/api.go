@@ -167,7 +167,9 @@ func (app *application) routes() http.Handler {
 			r.Use(app.requireAuthenicatedUser)
 			r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
 				r.Get("/", app.getCurrentUserCart)
-				r.Get("/items", app.getCartItems)
+				r.Get("/items", app.getGroupVendorCartItem)
+				r.Get("/items/vendor", app.getVendorCartItem)
+
 				r.Post("/items", app.addCardItem)
 				r.Get("/items/{cardItemID}", app.getCartItemByID)
 				r.Delete("/items/{itemID}", app.removeCartItem)
@@ -183,6 +185,8 @@ func (app *application) routes() http.Handler {
 				r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
 					r.Post("/", app.addProductToWhitelist)
 					r.Delete("/{itemID}", app.removeProductFromWhitelist)
+					r.Get("/", app.getGroupVendorWishlisttem)
+					r.Get("/vendor", app.getVendorWishlistItem)
 				})
 			})
 

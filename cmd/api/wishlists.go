@@ -45,7 +45,7 @@ func (app *application) addProductToWhitelist(w http.ResponseWriter, r *http.Req
 		ProductID: product.ID,
 	}
 
-	if err := app.store.Whitelists.AddItem(r.Context(), whitelist); err != nil {
+	if err := app.store.Wishlists.AddItem(r.Context(), whitelist); err != nil {
 		switch {
 		case errors.Is(err, store.ErrProductWishlistedAlready):
 			app.conflictResponse(w, r, err.Error())
@@ -69,7 +69,7 @@ func (app *application) removeProductFromWhitelist(w http.ResponseWriter, r *htt
 	itemID := app.readStringID(r, "itemID")
 
 	// Remove product from whitelist
-	if err := app.store.Whitelists.RemoveItem(r.Context(), itemID, user.ID); err != nil {
+	if err := app.store.Wishlists.RemoveItem(r.Context(), itemID, user.ID); err != nil {
 		switch {
 		case errors.Is(err, store.ErrRecordNotFound):
 			app.notFoundResponse(w, r, "item not found")
@@ -84,5 +84,83 @@ func (app *application) removeProductFromWhitelist(w http.ResponseWriter, r *htt
 	response := envelope{
 		"message": "product removed from whitelist successfully",
 	}
+	app.successResponse(w, http.StatusOK, response)
+}
+
+func (app *application) getGroupVendorWishlisttem(w http.ResponseWriter, r *http.Request) {
+
+	fq := store.PaginateQueryFilter{
+		Page:         1,
+		PageSize:     20,
+		Sort:         "created_at",
+		SortSafelist: []string{"created_at", "-created_at"},
+	}
+
+	if err := fq.Parse(r); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	user := getUserFromCtx(r)
+
+	wishlists, metadata, err := app.store.Wishlists.GetGroupWishlistItems(r.Context(), user.ID, 3, fq)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	response := envelope{
+		"vendor_wishlists": wishlists,
+		"metadata":         metadata,
+	}
+
+	app.successResponse(w, http.StatusOK, response)
+}
+
+func (app *application) getVendorWishlistItem(w http.ResponseWriter, r *http.Request) {
+	fq := store.PaginateQueryFilter{
+		Page:         1,
+		PageSize:     20,
+		Sort:         "created_at",
+		SortSafelist: []string{"created_at", "-created_at"},
+	}
+
+	if err := fq.Parse(r); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	vendorID := r.URL.Query().Get("vendor_id")
+	if vendorID == "" {
+		app.badRequestResponse(w, r, errors.New("vendor_id missing in query"))
+		return
+	}
+
+	vendor, err := app.store.Users.GetVendorByID(r.Context(), vendorID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "vendor not found")
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	user := getUserFromCtx(r)
+
+	wishlists, metadata, err := app.store.Wishlists.GetWishlistItems(r.Context(), user.ID, vendor.ID, fq)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	response := envelope{
+		"vendor_wishlists": wishlists,
+		"metadata":         metadata,
+	}
+
 	app.successResponse(w, http.StatusOK, response)
 }

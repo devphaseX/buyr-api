@@ -33,7 +33,7 @@ func (app *application) getCurrentUserCart(w http.ResponseWriter, r *http.Reques
 	app.successResponse(w, http.StatusOK, response)
 }
 
-func (app *application) getCartItems(w http.ResponseWriter, r *http.Request) {
+func (app *application) getGroupVendorCartItem(w http.ResponseWriter, r *http.Request) {
 
 	fq := store.PaginateQueryFilter{
 		Page:         1,
@@ -55,7 +55,61 @@ func (app *application) getCartItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cartItems, metadata, err := app.store.CartItems.GetCartItemWithVendor(r.Context(), cart.ID, 3, fq)
+	cartItems, metadata, err := app.store.CartItems.GetGroupCartItems(r.Context(), cart.ID, 3, fq)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	response := envelope{
+		"vendor_cart_items": cartItems,
+		"metadata":          metadata,
+	}
+
+	app.successResponse(w, http.StatusOK, response)
+}
+
+func (app *application) getVendorCartItem(w http.ResponseWriter, r *http.Request) {
+	fq := store.PaginateQueryFilter{
+		Page:         1,
+		PageSize:     20,
+		Sort:         "created_at",
+		SortSafelist: []string{"created_at", "-created_at"},
+	}
+
+	if err := fq.Parse(r); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	vendorID := r.URL.Query().Get("vendor_id")
+	if vendorID == "" {
+		app.badRequestResponse(w, r, errors.New("vendor_id missing in query"))
+		return
+	}
+
+	vendor, err := app.store.Users.GetVendorByID(r.Context(), vendorID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "vendor not found")
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	user := getUserFromCtx(r)
+	cart, err := app.store.Carts.GetCartByUserID(user.ID)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	cartItems, metadata, err := app.store.CartItems.GetCartItems(r.Context(), cart.ID, vendor.ID, fq)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
