@@ -92,7 +92,13 @@ func (app *application) createProduct(w http.ResponseWriter, r *http.Request) {
 	product.Features = productFeatures
 
 	if err := app.store.Products.Create(r.Context(), product); err != nil {
-		app.serverErrorResponse(w, r, err)
+		switch {
+		case errors.Is(err, store.ErrProductCategoryNotFound):
+			app.notFoundResponse(w, r, "category not exist")
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
 

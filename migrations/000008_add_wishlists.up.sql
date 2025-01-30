@@ -10,5 +10,7 @@ CREATE TABLE IF NOT EXISTS wishlists (
         time zone default now ()
 );
 
+ALTER TABLE wishlists ADD CONSTRAINT wishlists_user_id_product_id_uniq UNIQUE (user_id, product_id);
+
 ALTER TABLE wishlists ADD CONSTRAINT wishlists_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id),
 ADD CONSTRAINT wishlists_product_id_fk FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE;

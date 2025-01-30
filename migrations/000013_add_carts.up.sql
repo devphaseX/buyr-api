@@ -10,4 +10,6 @@ CREATE TABLE IF NOT EXISTS carts (
         time zone default now ()
 );
 
+ALTER TABLE carts ADD CONSTRAINT carts_user_id_unique UNIQUE (user_id);
+
 ALTER TABLE carts ADD CONSTRAINT carts_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;

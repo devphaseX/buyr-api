@@ -61,6 +61,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskSendActivateAccountEmail, processor.ProcessTaskSendActivateAcctEmail)
 	mux.HandleFunc(TaskSendRecoverAccountEmail, processor.ProcessTaskSendRecoverAccountEmail)
 	mux.HandleFunc(TaskSendVendorActivationEmail, processor.ProcessTaskSendVendorActivationEmail)
+	mux.HandleFunc(TaskSendAdminOnboardEmail, processor.ProcessTaskSendAdminOnboardEmail)
 	return processor.server.Start(mux)
 }
 

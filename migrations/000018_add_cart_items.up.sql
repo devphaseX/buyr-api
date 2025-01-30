@@ -14,5 +14,7 @@ CREATE TABLE IF NOT EXISTS cart_items (
         time zone default now ()
 );
 
+ALTER TABLE cart_items ADD CONSTRAINT cart_items_cart_product_unique UNIQUE (cart_id, product_id);
+
 ALTER TABLE cart_items ADD CONSTRAINT cart_items_cart_id_fk FOREIGN KEY (cart_id) REFERENCES carts (id),
 ADD CONSTRAINT cart_items_product_id_fk FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE;

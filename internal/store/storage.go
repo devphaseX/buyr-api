@@ -36,7 +36,7 @@ func NewStorage(db *sql.DB) *Storage {
 		Reviews:    NewReviewModel(db),
 		Carts:      NewCartModel(db),
 		CartItems:  NewCartItemModel(db),
-		Whitelists: NewWhitelistModel(db),
+		Whitelists: NewWishlistModel(db),
 	}
 }
 

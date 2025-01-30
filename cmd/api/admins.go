@@ -62,7 +62,7 @@ func (app *application) createAdmin(w http.ResponseWriter, r *http.Request) {
 		AdminLevel: store.AdminLevelNone,
 		User: store.User{
 			Email:               form.Email,
-			Role:                store.VendorRole,
+			Role:                store.AdminRole,
 			ForcePasswordChange: true,
 			AvatarURL:           photoURL,
 		},
@@ -108,7 +108,7 @@ func (app *application) createAdmin(w http.ResponseWriter, r *http.Request) {
 
 	// Return a success response
 	app.successResponse(w, http.StatusCreated, envelope{
-		"message": "Vendor created successfully",
+		"message": "adminstration account created successfully",
 	})
 }
 

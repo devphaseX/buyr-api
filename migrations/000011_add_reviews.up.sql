@@ -12,5 +12,5 @@ CREATE TABLE IF NOT EXISTS reviews (
         time zone default now ()
 );
 
-ALTER TABLE reviews ADD CONSTRAINT reviews_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id),
+ALTER TABLE reviews ADD CONSTRAINT reviews_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
 ADD CONSTRAINT reviews_product_id_fk FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE;

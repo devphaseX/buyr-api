@@ -169,7 +169,7 @@ func (app *application) routes() http.Handler {
 				r.Get("/", app.getCurrentUserCart)
 				r.Get("/items", app.getCartItems)
 				r.Post("/items", app.addCardItem)
-				r.Get("/items/{cardItemID}", app.getCartByID)
+				r.Get("/items/{cardItemID}", app.getCartItemByID)
 				r.Delete("/items/{itemID}", app.removeCartItem)
 
 			})
@@ -178,15 +178,15 @@ func (app *application) routes() http.Handler {
 		r.Route("/products", func(r chi.Router) {
 			r.Get("/", app.getProducts)
 
-			r.Route("/{productID}", func(r chi.Router) {
-				r.Route("/whitelists", func(r chi.Router) {
-					r.Use(app.requireAuthenicatedUser)
-					r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
-						r.Post("/", app.addProductToWhitelist)
-						r.Delete("/items/{itemID}", app.removeProductFromWhitelist)
-
-					})
+			r.Route("/whitelists", func(r chi.Router) {
+				r.Use(app.requireAuthenicatedUser)
+				r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
+					r.Post("/", app.addProductToWhitelist)
+					r.Delete("/{itemID}", app.removeProductFromWhitelist)
 				})
+			})
+
+			r.Route("/{productID}", func(r chi.Router) {
 
 				r.Get("/", app.getProduct)
 				r.Route("/reviews", func(r chi.Router) {

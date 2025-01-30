@@ -10,6 +10,11 @@ import (
 	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/db"
+	"github.com/lib/pq"
+)
+
+var (
+	ErrProductCategoryNotFound = errors.New("category not exist")
 )
 
 type ProductStatus string
@@ -85,7 +90,7 @@ func NewProductModel(db *sql.DB) ProductStore {
 func create(ctx context.Context, tx *sql.Tx, product *Product) error {
 	query := `INSERT INTO products(id, name, description,
 			 stock_quantity, total_items_sold_count, status, published, vendor_id,
-			 discount, price, category_id) 	VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 discount, price, category_id) 	VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			 RETURNING id, created_at, updated_at
 				`
 	id := db.GenerateULID()
@@ -100,7 +105,17 @@ func create(ctx context.Context, tx *sql.Tx, product *Product) error {
 	err := tx.QueryRowContext(ctx, query, args...).Scan(&product.ID, &product.CreatedAt, &product.UpdatedAt)
 
 	if err != nil {
-		return err
+		var pgErr *pq.Error
+		switch {
+		case errors.As(err, &pgErr):
+			if pgErr.Constraint == "products_category_id_fk" {
+				return ErrProductCategoryNotFound
+			}
+			fallthrough
+		default:
+			return err
+
+		}
 	}
 
 	return nil
@@ -370,7 +385,7 @@ func (s *ProductModel) GetWithDetails(ctx context.Context, productID string) (*P
 		&imageJSON, &featureJSON)
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrRecordNotFound):
+		case errors.Is(err, sql.ErrNoRows):
 			return nil, ErrRecordNotFound
 		default:
 			return nil, fmt.Errorf("failed to scan product details: %w", err)

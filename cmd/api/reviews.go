@@ -75,7 +75,21 @@ func (app *application) getProductReviews(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	reviews, metadata, err := app.store.Reviews.GetByProductID(r.Context(), productID, fq)
+	product, err := app.store.Products.GetProductByID(r.Context(), productID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "product not found")
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+
+		return
+	}
+
+	reviews, metadata, err := app.store.Reviews.GetByProductID(r.Context(), product.ID, fq)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)

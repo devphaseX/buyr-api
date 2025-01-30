@@ -12,4 +12,6 @@ CREATE TABLE IF NOT EXISTS normal_users (
         time zone default now ()
 );
 
+ALTER TABLE normal_users ADD CONSTRAINT normal_users_user_id_unique UNIQUE (user_id);
+
 ALTER TABLE normal_users ADD CONSTRAINT normal_users_user_id_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;

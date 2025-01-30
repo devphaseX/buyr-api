@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/devphaseX/buyr-api.git/internal/store"
@@ -35,6 +34,19 @@ func (app *application) getCurrentUserCart(w http.ResponseWriter, r *http.Reques
 }
 
 func (app *application) getCartItems(w http.ResponseWriter, r *http.Request) {
+
+	fq := store.PaginateQueryFilter{
+		Page:         1,
+		PageSize:     20,
+		Sort:         "created_at",
+		SortSafelist: []string{"created_at", "-created_at"},
+	}
+
+	if err := fq.Parse(r); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
 	user := getUserFromCtx(r)
 
 	cart, err := app.store.Carts.GetCartByUserID(user.ID)
@@ -43,21 +55,21 @@ func (app *application) getCartItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cartItems, err := app.store.CartItems.GetItems(r.Context(), cart.ID)
-
+	cartItems, metadata, err := app.store.CartItems.GetCartItemWithVendor(r.Context(), cart.ID, 3, fq)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
 	response := envelope{
-		"cart_items": cartItems,
+		"vendor_cart_items": cartItems,
+		"metadata":          metadata,
 	}
 
 	app.successResponse(w, http.StatusOK, response)
 }
 
-func (app *application) getCartByID(w http.ResponseWriter, r *http.Request) {
+func (app *application) getCartItemByID(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromCtx(r)
 
 	cardItemID := app.readStringID(r, "cardItemID")
@@ -71,7 +83,12 @@ func (app *application) getCartByID(w http.ResponseWriter, r *http.Request) {
 	cartItem, err := app.store.CartItems.GetItemByID(r.Context(), cart.ID, cardItemID)
 
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "cart item not found")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
 
@@ -112,7 +129,6 @@ func (app *application) addCardItem(w http.ResponseWriter, r *http.Request) {
 
 	product, err := app.store.Products.GetProductByID(r.Context(), form.ProductID)
 
-	fmt.Println(product)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrRecordNotFound):
@@ -132,7 +148,13 @@ func (app *application) addCardItem(w http.ResponseWriter, r *http.Request) {
 	cartItem, err := app.store.CartItems.AddItem(r.Context(), cart.ID, product.ID, form.Quantity)
 
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		switch {
+		case errors.Is(err, store.ErrProductAlreadyCarted):
+			app.conflictResponse(w, r, "item already in cart")
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
 

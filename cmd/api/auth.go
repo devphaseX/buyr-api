@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,36 +64,7 @@ func (app *application) registerNormalUser(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	activationToken, err := app.cacheStore.Tokens.New(
-		user.UserID,
-		time.Hour*24*3,
-		cache.ScopeActivation,
-		nil,
-	)
-
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
-	err = app.cacheStore.Tokens.Insert(r.Context(), activationToken)
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
-	asynqOpts := []asynq.Option{
-		asynq.MaxRetry(3),
-		asynq.Queue(worker.QueueCritical),
-	}
-
-	err = app.taskDistributor.DistributeTaskSendActivateAccountEmail(r.Context(),
-		&worker.PayloadSendActivateAcctEmail{
-			Username:  fmt.Sprintf("%s %s", user.FirstName, user.LastName),
-			Email:     user.User.Email,
-			ClientURL: app.cfg.clientURL,
-			Token:     activationToken.Plaintext,
-		}, asynqOpts...)
+	err = app.sendAccountActivationEmail(r.Context(), &user.User)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -100,6 +72,71 @@ func (app *application) registerNormalUser(w http.ResponseWriter, r *http.Reques
 	}
 
 	app.successResponse(w, http.StatusCreated, nil)
+}
+
+func (app *application) sendAccountActivationEmail(ctx context.Context, user *store.User) error {
+	// Create new activation token
+	activationToken, err := app.cacheStore.Tokens.New(
+		user.ID,
+		time.Hour*24*3,
+		cache.ScopeActivation,
+		nil,
+	)
+
+	if err != nil {
+		return fmt.Errorf("creating activation token: %w", err)
+	}
+
+	err = app.cacheStore.Tokens.Insert(ctx, activationToken)
+	if err != nil {
+		return fmt.Errorf("inserting activation token: %w", err)
+	}
+
+	flattenUser, err := app.store.Users.FlattenUser(ctx, user)
+	if err != nil {
+		return fmt.Errorf("flattening user: %w", err)
+	}
+
+	// Distribute email task
+	asynqOpts := []asynq.Option{
+		asynq.MaxRetry(3),
+		asynq.Queue(worker.QueueCritical),
+	}
+
+	switch user.Role {
+	case store.UserRole:
+		err = app.taskDistributor.DistributeTaskSendActivateAccountEmail(ctx,
+			&worker.PayloadSendActivateAcctEmail{
+				Username:  fmt.Sprintf("%s %s", flattenUser.FirstName, flattenUser.LastName),
+				Email:     user.Email,
+				ClientURL: app.cfg.clientURL,
+				Token:     activationToken.Plaintext,
+			}, asynqOpts...)
+	case store.VendorRole:
+		err = app.taskDistributor.DistributeTaskSendVendorActivationEmail(ctx,
+			&worker.PayloadSendVendorActivationEmail{
+				Username:  flattenUser.BusinessName,
+				Token:     activationToken.Plaintext,
+				Email:     user.Email,
+				ClientURL: app.cfg.clientURL,
+			}, asynqOpts...)
+	case store.AdminRole:
+		err = app.taskDistributor.DistributeTaskSendAdminOnboardEmail(ctx,
+			&worker.PayloadSendAdminOnboardEmail{
+				Username:  fmt.Sprintf("%s %s", flattenUser.FirstName, flattenUser.LastName),
+				Token:     activationToken.Plaintext,
+				Email:     user.Email,
+				ClientURL: app.cfg.clientURL,
+			}, asynqOpts...)
+	default:
+		return fmt.Errorf("unsupported user role: %v", user.Role)
+	}
+
+	if err != nil {
+		return fmt.Errorf("distributing activation email task: %w", err)
+	}
+
+	return nil
 }
 
 func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
@@ -219,7 +256,12 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 	user, err := app.store.Users.GetByEmail(r.Context(), form.Email)
 
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.invalidCredentialsResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
 
@@ -238,6 +280,17 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 
 	if !match {
 		app.invalidCredentialsResponse(w, r)
+		return
+	}
+
+	if user.EmailVerifiedAt == nil {
+		err = app.sendAccountActivationEmail(r.Context(), user)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		app.forbiddenResponse(w, r, "Account not activated. A new activation email has been sent to your email address.")
 		return
 	}
 

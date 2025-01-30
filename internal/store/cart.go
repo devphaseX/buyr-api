@@ -3,10 +3,18 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/db"
+	"github.com/lib/pq"
+)
+
+var (
+	ErrProductAlreadyCarted = errors.New("product already carted")
 )
 
 type Cart struct {
@@ -44,17 +52,18 @@ func NewCartModel(db *sql.DB) CartStore {
 func (m *CartModel) CreateCart(userID string) (*Cart, error) {
 	cartID := db.GenerateULID()
 	query := `
-		INSERT INTO carts (id, user_id)
-		VALUES ($1, $2)
+		INSERT INTO carts (id, is_active, user_id)
+		VALUES ($1, $2, $3)
 		RETURNING created_at, updated_at, is_active
 	`
 
 	cart := &Cart{
-		ID:     cartID,
-		UserID: userID,
+		ID:       cartID,
+		UserID:   userID,
+		IsActive: true,
 	}
 
-	err := m.db.QueryRow(query, cartID, userID).Scan(&cart.CreatedAt, &cart.UpdatedAt, &cart.IsActive)
+	err := m.db.QueryRow(query, cartID, cart.IsActive, userID).Scan(&cart.CreatedAt, &cart.UpdatedAt, &cart.IsActive)
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +101,7 @@ type CartItemStore interface {
 	UpdateItem(ctx context.Context, itemID string, quantity int) error
 	DeleteItem(ictx context.Context, temID string) error
 	GetItems(ctx context.Context, cartID string) ([]*CartItemDetails, error)
+	GetCartItemWithVendor(ctx context.Context, cartID string, itemLimit int, filter PaginateQueryFilter) ([]*VendorWithItems, Metadata, error)
 }
 
 type CartItemModel struct {
@@ -126,7 +136,18 @@ func (m *CartItemModel) AddItem(ctx context.Context, cartID, productID string, q
 		Scan(&item.CreatedAt, &item.UpdatedAt)
 
 	if err != nil {
-		return nil, err
+		var pgErr *pq.Error
+		switch {
+		case errors.As(err, &pgErr):
+			if pgErr.Constraint == "cart_items_cart_product_unique" {
+				return nil, ErrProductAlreadyCarted
+			}
+
+			fallthrough
+
+		default:
+			return nil, err
+		}
 	}
 
 	return item, nil
@@ -315,4 +336,180 @@ func (m *CartItemModel) GetItems(ctx context.Context, cartID string) ([]*CartIte
 	}
 
 	return items, nil
+}
+
+type VendorGroupCartItem struct {
+	CartItem
+	Product struct {
+		ID                  string        `json:"id"`
+		Name                string        `json:"name"`
+		Description         string        `json:"description"`
+		StockQuantity       int           `json:"stock_quantity"`
+		Status              ProductStatus `json:"status"`
+		AvatarURL           string        `json:"avatar_url"`
+		Published           bool          `json:"published"`
+		TotalItemsSoldCount int           `json:"total_items_sold_count"`
+		VendorID            string        `json:"vendor_id"`
+		Discount            float64       `json:"discount"`
+		Price               float64       `json:"price"`
+		CategoryID          string        `json:"category_id"`
+		CreatedAt           time.Time     `json:"created_at"`
+		UpdatedAt           time.Time     `json:"updated_at"`
+	} `json:"product"`
+}
+
+type VendorWithItems struct {
+	ID              string                 `json:"id"`
+	VendorName      string                 `json:"vendor_name"`
+	VendorAvatarURL string                 `json:"vendor_avatar_url"`
+	Items           []*VendorGroupCartItem `json:"items"`
+	Metadata        Metadata               `json:"metadata"`
+}
+
+func (m *CartItemModel) GetCartItemWithVendor(ctx context.Context, cartID string,
+	itemLimit int, filter PaginateQueryFilter) ([]*VendorWithItems, Metadata, error) {
+	query := `
+		WITH vendor_items AS (
+			SELECT
+				v.id AS vendor_id,
+				v.business_name AS vendor_name,
+				u.avatar_url AS vendor_avatar_url,
+				ci.id AS item_id,
+				ci.cart_id,
+				ci.product_id,
+				ci.added_at,
+				ci.quantity,
+				ci.created_at AS ci_created_at,
+				ci.updated_at AS ci_updated_at,
+				p.name AS product_name,
+				p.description AS product_description,
+				p.stock_quantity,
+				p.status,
+				pi.url AS product_avatar_url,
+				p.published,
+				p.total_items_sold_count,
+				p.discount,
+				p.price,
+				p.category_id,
+				p.created_at AS product_created_at,
+				p.updated_at AS product_updated_at,
+				ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY ci.added_at DESC) AS item_rank,
+				COUNT(*) OVER (PARTITION BY v.id) AS total_items_per_vendor
+			FROM cart_items ci
+			JOIN products p ON ci.product_id = p.id
+			LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
+			JOIN vendor_users v ON p.vendor_id = v.id
+			JOIN users u ON u.id = v.user_id
+			WHERE ci.cart_id = $1
+		),
+		paginated_vendors AS (
+			SELECT DISTINCT
+				vendor_id,
+				vendor_name,
+				vendor_avatar_url,
+				total_items_per_vendor
+			FROM vendor_items
+			ORDER BY vendor_id
+			LIMIT $2 OFFSET $3
+		)
+		SELECT
+			pv.vendor_id,
+			pv.vendor_name,
+			pv.vendor_avatar_url,
+			pv.total_items_per_vendor,
+			(
+				SELECT json_agg(
+					json_build_object(
+						'id', vi.item_id,
+						'product_id', vi.product_id,
+						'cart_id', vi.cart_id,
+						'added_at', vi.added_at,
+						'quantity', vi.quantity,
+						'created_at', vi.ci_created_at,
+						'updated_at', vi.ci_updated_at,
+						'product', json_build_object(
+							'id', vi.product_id,
+							'name', vi.product_name,
+							'description', vi.product_description,
+							'stock_quantity', vi.stock_quantity,
+							'status', vi.status,
+							'vendor_id', vi.vendor_id,
+							'avatar_url', vi.product_avatar_url,
+							'published', vi.published,
+							'total_items_sold_count', vi.total_items_sold_count,
+							'discount', vi.discount,
+							'price', vi.price,
+							'category_id', vi.category_id,
+							'created_at', vi.product_created_at,
+							'updated_at', vi.product_updated_at
+						)
+					)
+				)
+				FROM vendor_items vi
+				WHERE vi.vendor_id = pv.vendor_id AND vi.item_rank <= $4
+			) AS items
+		FROM paginated_vendors pv
+		ORDER BY pv.vendor_id;
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	rows, err := m.DB.QueryContext(ctx, query, cartID, filter.Limit(), filter.Offset(), itemLimit)
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("failed to query cart items: %w", err)
+	}
+	defer rows.Close()
+
+	var (
+		vendorsWithItems = []*VendorWithItems{}
+		totalVendors     int
+	)
+
+	for rows.Next() {
+		var (
+			vendorID            string
+			vendorName          string
+			vendorAvatarURL     sql.NullString
+			totalItemsPerVendor int
+			itemsJSON           []byte
+		)
+
+		err := rows.Scan(
+			&vendorID, &vendorName, &vendorAvatarURL, &totalItemsPerVendor, &itemsJSON,
+		)
+		if err != nil {
+			return nil, Metadata{}, fmt.Errorf("failed to scan vendor: %w", err)
+		}
+
+		var items []*VendorGroupCartItem
+		if err := json.Unmarshal(itemsJSON, &items); err != nil {
+			return nil, Metadata{}, fmt.Errorf("failed to unmarshal items JSON: %w", err)
+		}
+
+		vendor := &VendorWithItems{
+			ID:              vendorID,
+			VendorName:      vendorName,
+			VendorAvatarURL: vendorAvatarURL.String,
+			Items:           items,
+			Metadata: Metadata{
+				CurrentPage:  1,
+				PageSize:     itemLimit,
+				TotalRecords: totalItemsPerVendor,
+				LastPage:     int(math.Ceil(float64(totalItemsPerVendor) / float64(itemLimit))),
+			},
+		}
+
+		vendorsWithItems = append(vendorsWithItems, vendor)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, fmt.Errorf("error after iterating over rows: %w", err)
+	}
+
+	// Calculate top-level pagination metadata
+	totalVendors = len(vendorsWithItems)
+	metadata := calculateMetadata(totalVendors, filter.Page, filter.PageSize)
+
+	return vendorsWithItems, metadata, nil
 }
