@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -22,6 +23,7 @@ type Category struct {
 type CategoryStore interface {
 	Create(ctx context.Context, category *Category) error
 	RemoveByID(ctx context.Context, categoryID string) error
+	GetByID(ctx context.Context, categoryID string) (*Category, error)
 	GetPublicCategorie(ctx context.Context, filter PaginateQueryFilter) ([]*Category, Metadata, error)
 	GetAdminCategoryView(ctx context.Context, filter PaginateQueryFilter) ([]*AdminCategoryView, Metadata, error)
 	SetCategoryVisibility(ctx context.Context, categoryID string, visibility bool) error
@@ -303,4 +305,42 @@ func (m *CategoryModel) SetCategoryVisibility(ctx context.Context, categoryID st
 	}
 
 	return nil
+}
+
+func (m *CategoryModel) GetByID(ctx context.Context, categoryID string) (*Category, error) {
+	query := `SELECT
+ 				c.id,
+            	c.name,
+            	c.description,
+            	c.visible,
+            	c.created_at,
+            	c.updated_at,
+             FROM categories C
+             WHERE C.id = $1`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	category := &Category{}
+	err := m.db.QueryRowContext(ctx, query, categoryID).Scan(
+		&category.ID,
+		&category.Name,
+		&category.Description,
+		&category.Visible,
+		&category.CreatedAt,
+		&category.UpdatedAt,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+
+		default:
+			return nil, err
+
+		}
+	}
+
+	return category, nil
 }

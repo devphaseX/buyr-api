@@ -149,8 +149,9 @@ func (m *ReviewModel) Delete(ctx context.Context, productID, reviewID string) er
 }
 
 type ReviewRatingAnalytics struct {
-	Ratings          map[int]int64 `json:"ratings"`
-	TotalAverageRate float64       `json:"total_average_rate"`
+	Ratings           map[int]int64 `json:"ratings"`
+	TotalAverageRate  float64       `json:"total_average_rate"`
+	TotalReviewsCount int64         `json:"total_reviews_count"`
 }
 
 func (m *ReviewModel) GetReviewRatingAnalytics(ctx context.Context, productID string) (*ReviewRatingAnalytics, error) {
@@ -201,6 +202,7 @@ func (m *ReviewModel) GetReviewRatingAnalytics(ctx context.Context, productID st
 
 		totalSum += int64(rating) * count
 		totalCount += count
+		analytics.TotalReviewsCount = totalCount
 
 	}
 

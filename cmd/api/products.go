@@ -53,6 +53,24 @@ func (app *application) createProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	category, err := app.store.Category.GetByID(r.Context(), form.CategoryID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "category not found")
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	if !category.Visible {
+		app.notFoundResponse(w, r, "category not found")
+		return
+	}
+
 	product := &store.Product{
 		Name:          form.Name,
 		Description:   form.Description,
