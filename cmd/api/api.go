@@ -195,6 +195,7 @@ func (app *application) routes() http.Handler {
 				r.Get("/", app.getProduct)
 				r.Route("/reviews", func(r chi.Router) {
 					r.Get("/", app.getProductReviews)
+					r.Get("/analytics", app.getReviewRatingAnalytics)
 
 					r.With(app.requireAuthenicatedUser).Group(func(r chi.Router) {
 						r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Post("/", app.createReview)

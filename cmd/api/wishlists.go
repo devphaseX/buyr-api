@@ -68,7 +68,6 @@ func (app *application) removeProductFromWhitelist(w http.ResponseWriter, r *htt
 
 	itemID := app.readStringID(r, "itemID")
 
-	// Remove product from whitelist
 	if err := app.store.Wishlists.RemoveItem(r.Context(), itemID, user.ID); err != nil {
 		switch {
 		case errors.Is(err, store.ErrRecordNotFound):
@@ -80,7 +79,6 @@ func (app *application) removeProductFromWhitelist(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Return success response
 	response := envelope{
 		"message": "product removed from whitelist successfully",
 	}

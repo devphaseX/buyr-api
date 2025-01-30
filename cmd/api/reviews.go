@@ -139,3 +139,34 @@ func (app *application) removeReview(w http.ResponseWriter, r *http.Request) {
 
 	app.successResponse(w, http.StatusOK, response)
 }
+
+func (app *application) getReviewRatingAnalytics(w http.ResponseWriter, r *http.Request) {
+	productID := app.readStringID(r, "productID")
+
+	product, err := app.store.Products.GetProductByID(r.Context(), productID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "product not found")
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	analytics, err := app.store.Reviews.GetReviewRatingAnalytics(r.Context(), product.ID)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	response := envelope{
+		"product":   product,
+		"analytics": analytics,
+	}
+
+	app.successResponse(w, http.StatusOK, response)
+}

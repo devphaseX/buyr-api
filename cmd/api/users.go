@@ -64,26 +64,6 @@ func (app *application) getUser(ctx context.Context, userID string) (*AuthInfo, 
 	return authInfo, nil
 }
 
-/*
-	authInfo := &AuthInfo{
-			User: user,
-		}
-
-		switch user.Role {
-		case store.UserRole:
-			normalUser, err := app.store.Users.GetNormalUserByID(ctx, userID string)
-		case store.AdminRole:
-			adminUser, err := app.store.Users.GetAdminUserByID(ctx, user.ID)
-			if err == nil {
-				authInfo.AdminUser = adminUser
-			}
-		case store.VendorRole:
-			vendorUser, err := app.store.Users.GetVendorUserByID(ctx, user.ID)
-			if err == nil {
-				authInfo.VendorUser = vendorUser
-			}
-		}
-*/
 func (app *application) getNormalUsers(w http.ResponseWriter, r *http.Request) {
 	fq := store.PaginateQueryFilter{
 		Page:         1,

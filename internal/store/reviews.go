@@ -23,6 +23,7 @@ type ReviewStore interface {
 	Create(ctx context.Context, review *Review) error
 	Delete(ctx context.Context, productID, reviewID string) error
 	GetByProductID(ctx context.Context, productID string, filter PaginateQueryFilter) ([]*ReviewWithDetails, Metadata, error)
+	GetReviewRatingAnalytics(ctx context.Context, productID string) (*ReviewRatingAnalytics, error)
 }
 type ReviewModel struct {
 	db *sql.DB
@@ -145,4 +146,68 @@ func (m *ReviewModel) Delete(ctx context.Context, productID, reviewID string) er
 	}
 
 	return nil
+}
+
+type ReviewRatingAnalytics struct {
+	Ratings          map[int]int64 `json:"ratings"`
+	TotalAverageRate float64       `json:"total_average_rate"`
+}
+
+func (m *ReviewModel) GetReviewRatingAnalytics(ctx context.Context, productID string) (*ReviewRatingAnalytics, error) {
+	query := `
+	select r.rating, count(rs.id)
+		as count  from
+		(
+			select unnest(array[1, 2, 3, 4, 5]) as rating
+		) as r
+		LEFT JOIN reviews rs ON rs.rating = r.rating AND rs.product_id = $1
+		GROUP BY r.rating
+		ORDER BY r.rating DESC;
+
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+
+	rows, err := m.db.QueryContext(ctx, query, productID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	analytics := &ReviewRatingAnalytics{
+		Ratings: make(map[int]int64),
+	}
+
+	var (
+		totalSum   int64
+		totalCount int64
+	)
+
+	for rows.Next() {
+		var (
+			rating int
+			count  int64
+		)
+
+		if err := rows.Scan(&rating, &count); err != nil {
+			return nil, err
+		}
+
+		analytics.Ratings[rating] = count
+
+		totalSum += int64(rating) * count
+		totalCount += count
+
+	}
+
+	if totalCount > 0 {
+		analytics.TotalAverageRate = float64(totalSum) / float64(totalCount)
+	}
+
+	return analytics, nil
+
 }
