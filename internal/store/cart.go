@@ -103,6 +103,7 @@ type CartItemStore interface {
 	GetItems(ctx context.Context, cartID string) ([]*CartItemDetails, error)
 	GetGroupCartItems(ctx context.Context, cartID string, itemLimit int, filter PaginateQueryFilter) ([]*VendorWithItems, Metadata, error)
 	GetCartItems(ctx context.Context, cartID, vendorID string, filter PaginateQueryFilter) ([]*VendorGroupCartItem, Metadata, error)
+	SetItemQuantity(ctx context.Context, cartID, cartItemID string, quantity int) error
 }
 
 type CartItemModel struct {
@@ -641,4 +642,28 @@ func (m *CartItemModel) GetCartItems(ctx context.Context, cartID, vendorID strin
 
 	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
 	return cartItems, metadata, nil
+}
+
+func (m *CartItemModel) SetItemQuantity(ctx context.Context, cartID, cartItemID string, quantity int) error {
+	query := `UPDATE cart_items ci SET quantity = $1 WHERE ci.id = $2 AND ci.cart_id = $3`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	result, err := m.DB.ExecContext(ctx, query, quantity, cartItemID, cartID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+	return nil
 }

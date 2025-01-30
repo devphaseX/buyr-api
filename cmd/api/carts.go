@@ -256,3 +256,51 @@ func (app *application) removeCartItem(w http.ResponseWriter, r *http.Request) {
 	}
 	app.successResponse(w, http.StatusOK, response)
 }
+
+type setCartItemQuantityRequest struct {
+	Quantity int `json:"quantity" validate:"min=1"`
+}
+
+func (app *application) setCartItemQuantity(w http.ResponseWriter, r *http.Request) {
+	var form setCartItemQuantityRequest
+
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	user := getUserFromCtx(r)
+	itemID := app.readStringID(r, "itemID")
+
+	cart, err := app.store.Carts.GetCartByUserID(user.ID)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.store.CartItems.SetItemQuantity(r.Context(), cart.ID, itemID, form.Quantity)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "item not found")
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	response := envelope{
+		"message": "product quantity set",
+		"id":      itemID,
+	}
+
+	app.successResponse(w, http.StatusOK, response)
+}

@@ -174,6 +174,8 @@ func (app *application) routes() http.Handler {
 				r.Get("/items/{cardItemID}", app.getCartItemByID)
 				r.Delete("/items/{itemID}", app.removeCartItem)
 
+				r.Patch("/items/{itemID}", app.setCartItemQuantity)
+
 			})
 		})
 
