@@ -226,6 +226,11 @@ func (app *application) routes() http.Handler {
 			r.Use(app.requireAuthenicatedUser)
 			r.Use(app.CheckPermissions(RequireRoles(store.AdminRole)))
 
+			r.Route("/audit-logs", func(r chi.Router) {
+				r.Get("/", app.getAuditLogs)
+				r.Get("/{logID}", app.getAuditLogByID)
+			})
+
 			r.Route("/members", func(r chi.Router) {
 				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelSuper))).Post("/", app.createAdmin)
 				r.Get("/", app.getAdminUsers)

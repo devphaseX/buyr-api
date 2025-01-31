@@ -201,6 +201,7 @@ func (app *application) changeAdminRole(w http.ResponseWriter, r *http.Request) 
 			EventType:   store.ChangeRoleAuditEventType,
 			AccountID:   adminUser.User.ID,
 			PerformedBy: currentAdminUser.AdminUser.ID,
+			AccessLevel: store.AdminLevelSupport.GetRank(),
 			Timestamp:   time.Now().UTC(),
 			IPAddress:   r.RemoteAddr,
 			UserAgent:   r.UserAgent(),
@@ -277,6 +278,7 @@ func (app *application) disableAdminAccount(w http.ResponseWriter, r *http.Reque
 			AccountID:   adminUser.User.ID,
 			Reason:      form.Reason,
 			PerformedBy: currentAdminUser.AdminUser.ID,
+			AccessLevel: store.AdminLevelSupport.GetRank(),
 			Timestamp:   time.Now().UTC(),
 			IPAddress:   r.RemoteAddr,
 			UserAgent:   r.UserAgent(),
@@ -343,13 +345,13 @@ func (app *application) enableAdminAccount(w http.ResponseWriter, r *http.Reques
 	// Log the account enable event in the background.
 	app.background(func() {
 		if err := app.store.AuditLogs.LogEvent(r.Context(), store.AuditEvent{
-			EventType:        store.AccountEnabledAuditEventType,
-			PerformedBy:      currentAdminUser.AdminUser.ID,
-			Reason:           form.Reason, // Include the reason for enabling the account
-			Timestamp:        time.Now().UTC(),
-			AdminLevelAccess: currentAdminUser.AdminUser.AdminLevel,
-			IPAddress:        r.RemoteAddr,
-			UserAgent:        r.UserAgent(),
+			EventType:   store.AccountEnabledAuditEventType,
+			PerformedBy: currentAdminUser.AdminUser.ID,
+			Reason:      form.Reason, // Include the reason for enabling the account
+			Timestamp:   time.Now().UTC(),
+			AccessLevel: store.AdminLevelSupport.GetRank(),
+			IPAddress:   r.RemoteAddr,
+			UserAgent:   r.UserAgent(),
 		}); err != nil {
 			app.logger.Error("failed to log audit event", "error", err)
 		}

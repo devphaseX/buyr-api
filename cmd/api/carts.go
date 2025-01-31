@@ -213,6 +213,7 @@ func (app *application) addCardItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := envelope{
+		"message":   "product added to cart",
 		"cart_item": cartItem,
 	}
 
@@ -252,7 +253,8 @@ func (app *application) removeCartItem(w http.ResponseWriter, r *http.Request) {
 
 	// Return a success response
 	response := envelope{
-		"message": "cart item deleted successfully",
+		"message": "product remove from cart",
+		"id":      itemID,
 	}
 	app.successResponse(w, http.StatusOK, response)
 }
