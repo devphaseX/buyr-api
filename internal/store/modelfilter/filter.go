@@ -1,4 +1,4 @@
-package filter
+package modelfilter
 
 import "net/http"
 

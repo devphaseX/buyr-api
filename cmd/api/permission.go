@@ -44,11 +44,15 @@ func (a *AuthInfo) CanModifySystemSettings() bool {
 
 // Add utility methods to AuthInfo
 func (a *AuthInfo) IsRegularUser() bool {
-	return a.User.Role == store.UserRole
+	return !a.IsAnonymous && a.User.Role == store.UserRole
 }
 
 func (a *AuthInfo) IsVendor() bool {
-	return a.User.Role == store.VendorRole
+	return !a.IsAnonymous && a.User.Role == store.VendorRole
+}
+
+func (a *AuthInfo) IsAdmin() bool {
+	return !a.IsAnonymous && a.Role == store.AdminRole
 }
 
 func (a *AuthInfo) IsUserOrVendor() bool {

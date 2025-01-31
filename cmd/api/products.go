@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/store"
+	"github.com/devphaseX/buyr-api.git/internal/store/modelfilter"
 )
 
 type CreateProductImageRequest struct {
@@ -135,6 +136,11 @@ func (app *application) publishProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !(vendorUser.UserID == user.ID || user.Role == store.AdminRole) {
+		app.notFoundResponse(w, r, "product not found")
+		return
+	}
+
 	productID := app.readStringID(r, "productID")
 	if err := app.store.Products.Publish(r.Context(), productID, vendorUser.ID); err != nil {
 		switch {
@@ -159,6 +165,11 @@ func (app *application) unPublishProduct(w http.ResponseWriter, r *http.Request)
 	vendorUser, err := app.store.Users.GetVendorUserByID(r.Context(), user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	if !(vendorUser.UserID == user.ID || user.Role == store.AdminRole) {
+		app.notFoundResponse(w, r, "product not found")
 		return
 	}
 
@@ -225,6 +236,7 @@ func (app *application) rejectProduct(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) getProduct(w http.ResponseWriter, r *http.Request) {
 	productID := app.readStringID(r, "productID")
+	user := getUserFromCtx(r)
 
 	// Fetch the product, images, and features using a single query with LEFT JOIN
 	product, err := app.store.Products.GetWithDetails(r.Context(), productID)
@@ -243,6 +255,25 @@ func (app *application) getProduct(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
+	}
+
+	if user.IsAnonymous || !((user.IsVendor() && user.ID == vendorUser.UserID) || user.Role == store.AdminRole) {
+		category, err := app.store.Category.GetByID(r.Context(), product.CategoryID)
+		if err != nil {
+			switch {
+			case errors.Is(err, store.ErrRecordNotFound):
+				app.notFoundResponse(w, r, "product not found")
+
+			default:
+				app.serverErrorResponse(w, r, err)
+			}
+			return
+		}
+
+		if !category.Visible {
+			app.notFoundResponse(w, r, "product not found")
+			return
+		}
 	}
 
 	vendorClientView := struct {
@@ -280,11 +311,27 @@ func (app *application) getProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) getProducts(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromCtx(r)
+	var vendorID *string
+
+	if user.IsVendor() {
+		vendorUser, err := app.store.Users.GetVendorUserByID(r.Context(), user.ID)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+		vendorID = &vendorUser.ID
+	}
+
 	fq := store.PaginateQueryFilter{
 		Page:         1,
 		PageSize:     20,
 		Sort:         "created_at",
 		SortSafelist: []string{"created_at", "-created_at"},
+		Filters: &modelfilter.GetProductsFilter{
+			VendorID:  vendorID,
+			AdminView: user.IsAdmin(),
+		},
 	}
 
 	if err := fq.Parse(r); err != nil {

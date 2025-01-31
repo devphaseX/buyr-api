@@ -58,7 +58,7 @@ func (app *application) getPublicCategories(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	categories, metadata, err := app.store.Category.GetPublicCategorie(r.Context(), fq)
+	categories, metadata, err := app.store.Category.GetPublicCategories(r.Context(), fq)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)

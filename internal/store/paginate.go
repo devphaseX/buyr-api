@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devphaseX/buyr-api.git/internal/filter"
+	"github.com/devphaseX/buyr-api.git/internal/store/modelfilter"
 	"github.com/devphaseX/buyr-api.git/internal/validator"
 )
 
@@ -15,7 +15,7 @@ type PaginateQueryFilter struct {
 	PageSize int    `validate:"gte=1,lte=100"` // Number of items per page (default: 20)
 	Sort     string // Sort field and direction (e.g., "created_at" or "-created_at")
 
-	Filters      filter.Filterable
+	Filters      modelfilter.Filterable
 	SortSafelist []string // List of allowed sort fields
 	*validator.Validator
 }

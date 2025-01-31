@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/db"
+	"github.com/devphaseX/buyr-api.git/internal/store/modelfilter"
 	"github.com/lib/pq"
 )
 
@@ -369,8 +370,9 @@ func (s *ProductModel) GetWithDetails(ctx context.Context, productID string) (*P
 			) AS features
 		FROM
 			products p
+			LEFT JOIN category c ON c.id = p.category_id
 		WHERE
-			p.id = $1;
+			p.id = $1 AND (c.id IS null || c.visible = true);
 	`
 	row := s.db.QueryRowContext(ctx, query, productID)
 	var (
@@ -435,6 +437,19 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 				'[]'
 			) AS images
 		FROM products p
+		LEFT JOIN category c ON c.id = p.category_id
+		WHERE
+				(
+				   c.visible = true
+				   OR
+				   ($3::text is NOT NULL AND p.vendor_id = $3)
+				   OR $4 = true
+				)
+				AND
+				(
+					$3 is NULL OR p.vendor_id = $3
+				)
+
 		ORDER BY p.%s %s
 		LIMIT $1 OFFSET $2
 	`, filter.SortColumn(), filter.SortDirection())
@@ -442,7 +457,11 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
-	rows, err := s.db.QueryContext(ctx, query, filter.Limit(), filter.Offset())
+	dataFilter := filter.Filters.(*modelfilter.GetProductsFilter)
+
+	rows, err := s.db.QueryContext(ctx, query, filter.Limit(), filter.Offset(),
+		dataFilter.VendorID, dataFilter.AdminView)
+
 	if err != nil {
 		return nil, Metadata{}, fmt.Errorf("failed to query products: %w", err)
 	}

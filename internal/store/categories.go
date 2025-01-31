@@ -24,7 +24,7 @@ type CategoryStore interface {
 	Create(ctx context.Context, category *Category) error
 	RemoveByID(ctx context.Context, categoryID string) error
 	GetByID(ctx context.Context, categoryID string) (*Category, error)
-	GetPublicCategorie(ctx context.Context, filter PaginateQueryFilter) ([]*Category, Metadata, error)
+	GetPublicCategories(ctx context.Context, filter PaginateQueryFilter) ([]*Category, Metadata, error)
 	GetAdminCategoryView(ctx context.Context, filter PaginateQueryFilter) ([]*AdminCategoryView, Metadata, error)
 	SetCategoryVisibility(ctx context.Context, categoryID string, visibility bool) error
 }
@@ -60,7 +60,7 @@ func (m *CategoryModel) Create(ctx context.Context, category *Category) error {
 	return nil
 }
 
-func (m *CategoryModel) GetPublicCategorie(ctx context.Context, filter PaginateQueryFilter) ([]*Category, Metadata, error) {
+func (m *CategoryModel) GetPublicCategories(ctx context.Context, filter PaginateQueryFilter) ([]*Category, Metadata, error) {
 	query := fmt.Sprintf(
 		`
 			SELECT count(id) over(), id, name, description,visible, created_at, updated_at FROM category
