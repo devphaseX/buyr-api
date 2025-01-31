@@ -415,11 +415,11 @@ func parseFeatures(featuresJSON string) []*ProductFeature {
 	}
 	return features
 }
-
 func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilter) ([]*Product, Metadata, error) {
+	// Construct the SQL query with detailed comments explaining each part of the query.
 	query := fmt.Sprintf(`
 		SELECT
-			count(p.id) OVER(),
+			count(p.id) OVER(), -- Get the total number of records for pagination
 			p.id, p.name, p.description, p.stock_quantity, p.status, p.published,
 			p.discount, p.price, p.category_id, p.total_items_sold_count,
 			p.vendor_id, p.created_at, p.updated_at,
@@ -433,32 +433,60 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 					'updated_at', pi.updated_at
 				))
 				FROM product_images pi
-				WHERE pi.product_id = p.id and pi.is_primary = true),
-				'[]'
+				WHERE pi.product_id = p.id AND pi.is_primary = true), -- Fetch primary images for each product
+				'[]' -- Default to an empty array if no images are found
 			) AS images
 		FROM products p
 		LEFT JOIN category c ON c.id = p.category_id
 		WHERE
-				(
-				   c.visible = true
-				   OR
-				   ($3::text is NOT NULL AND p.vendor_id = $3)
-				   OR $4 = true
-				)
-				AND
-				(
-					$3 is NULL OR p.vendor_id = $3
-				)
+			-- Visibility rules:
+			-- 1. The category is visible to the public.
+			-- 2. The product is being accessed by the vendor who owns it.
+			-- 3. The request is made by an admin.
+			(
+				c.visible = true
+				OR ($3::text IS NOT NULL AND p.vendor_id = $3)
+				OR $4 = true
+			)
+			AND
 
-		ORDER BY p.%s %s
-		LIMIT $1 OFFSET $2
-	`, filter.SortColumn(), filter.SortDirection())
+			-- Publication rules:
+			-- 1. The product is published.
+			-- 2. The product is being accessed by the vendor who owns it.
+			(
+				p.published = true
+				OR ($3::text IS NOT NULL AND p.vendor_id = $3)
+			)
+			AND
 
+			-- Product status rules:
+			-- 1. The product is approved.
+			-- 2. The request is made by an admin.
+			-- 3. The product is being accessed by the vendor who owns it.
+			(
+				p.status = '%s'
+				OR $4 = true
+				OR $3 = p.vendor_id
+			)
+			AND
+
+			-- Vendor filtering:
+			-- 1. If a vendor ID is provided, only show products belonging to that vendor.
+			(
+				$3 IS NULL OR p.vendor_id = $3
+			)
+		ORDER BY p.%s %s -- Sort by the specified column and direction
+		LIMIT $1 OFFSET $2 -- Pagination: limit and offset
+	`, ApprovedProductStatus, filter.SortColumn(), filter.SortDirection())
+
+	// Set a timeout for the query execution to avoid long-running queries.
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
+	// Extract the filters from the PaginateQueryFilter.
 	dataFilter := filter.Filters.(*modelfilter.GetProductsFilter)
 
+	// Execute the query with the provided filters.
 	rows, err := s.db.QueryContext(ctx, query, filter.Limit(), filter.Offset(),
 		dataFilter.VendorID, dataFilter.AdminView)
 
@@ -472,6 +500,7 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 		totalRecords int
 	)
 
+	// Iterate over the query results and scan each row into a Product struct.
 	for rows.Next() {
 		var (
 			product   = &Product{}
@@ -500,14 +529,17 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 			return nil, Metadata{}, fmt.Errorf("failed to scan product row: %w", err)
 		}
 
+		// Parse the JSON string of images into a slice of Image structs.
 		product.Images = parseImages(imageJSON)
 		products = append(products, product)
 	}
 
+	// Check for any errors that occurred during iteration.
 	if err = rows.Err(); err != nil {
 		return nil, Metadata{}, fmt.Errorf("error after iterating over product rows: %w", err)
 	}
 
+	// Calculate metadata for pagination.
 	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
 
 	return products, metadata, nil

@@ -41,6 +41,14 @@ func (a AdminLevel) HasAccessTo(required AdminLevel) bool {
 	return adminLevelWeights[a] >= adminLevelWeights[required]
 }
 
+func (a AdminLevel) CanModifyAdminLevel(b AdminLevel) bool {
+	return a.HasAccessTo(b)
+}
+
+func (a AdminLevel) GetRank() int {
+	return adminLevelWeights[a]
+}
+
 var AnonymousUser = &User{}
 
 // User represents a user in the system.
@@ -56,6 +64,7 @@ type User struct {
 	ForcePasswordChange  bool       `json:"force_password_change"`
 	TwoFactorAuthEnabled bool       `json:"-"`
 	IsActive             bool       `json:"is_active"`
+	Disabled             bool       `json:"-"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
 }
@@ -269,8 +278,11 @@ type UserStorage interface {
 	DisableTwoFactorAuth(ctx context.Context, userID string) error
 	GetVendorUserByID(ctx context.Context, userID string) (*VendorUser, error)
 	GetAdminUserByID(ctx context.Context, userID string) (*AdminUser, error)
+	GetAdminByID(ctx context.Context, userID string) (*AdminUser, error)
 	GetNormalUserByID(ctx context.Context, userID string) (*NormalUser, error)
-
+	ChangeAdminLevel(ctx context.Context, AdminID string, NewLevel AdminLevel) error
+	DisableUser(ctx context.Context, userID string) error
+	EnableUser(ctx context.Context, userID string) error
 	GetVendorByID(ctx context.Context, ID string) (*VendorUser, error)
 
 	FlattenUser(ctx context.Context, user *User) (*FlattenedUser, error)
@@ -707,6 +719,73 @@ func (s *UserModel) GetAdminUserByID(ctx context.Context, userID string) (*Admin
 	var authSecret sql.NullString
 
 	err := s.db.QueryRowContext(ctx, query, userID).Scan(
+		&adminUser.ID,
+		&adminUser.FirstName,
+		&adminUser.LastName,
+		&adminUser.UserID,
+		&adminUser.AdminLevel,
+		&adminUser.CreatedAt,
+		&adminUser.UpdatedAt,
+		&user.ID,
+		&user.Email,
+		&user.Password.hash,
+		&avatarURL,
+		&user.Role,
+		&emailVerifiedAt,
+		&isActive,
+		&user.TwoFactorAuthEnabled,
+		&authSecret,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	if emailVerifiedAt.Valid {
+		user.EmailVerifiedAt = &emailVerifiedAt.Time
+	}
+
+	if avatarURL.Valid {
+		user.AvatarURL = avatarURL.String
+	}
+
+	if isActive.Valid {
+		user.IsActive = isActive.Bool
+	}
+
+	if authSecret.Valid {
+		user.AuthSecret = authSecret.String
+	}
+
+	return adminUser, nil
+}
+
+func (s *UserModel) GetAdminByID(ctx context.Context, ID string) (*AdminUser, error) {
+	query := `
+		SELECT a.id, a.first_name, a.last_name, a.user_id,a.admin_level, a.created_at, a.updated_at,
+			   u.id, u.email, u.password_hash, u.avatar_url, u.role, u.email_verified_at,
+			   u.is_active, u.two_factor_auth_enabled, u.auth_secret, u.created_at, u.updated_at
+		FROM admin_users a
+		JOIN users u ON a.user_id = u.id
+		WHERE a.id = $1
+	`
+
+	adminUser := &AdminUser{}
+	user := &adminUser.User
+
+	var emailVerifiedAt sql.NullTime
+	var avatarURL sql.NullString
+	var isActive sql.NullBool
+	var authSecret sql.NullString
+
+	err := s.db.QueryRowContext(ctx, query, ID).Scan(
 		&adminUser.ID,
 		&adminUser.FirstName,
 		&adminUser.LastName,
@@ -1246,4 +1325,60 @@ func (u *UserModel) GetAdminUsers(ctx context.Context, filter PaginateQueryFilte
 
 	metadata := calculateMetadata(totalRecords, filter.Page, filter.PageSize)
 	return users, metadata, nil
+}
+
+func (m *UserModel) ChangeAdminLevel(ctx context.Context, AdminID string, NewLevel AdminLevel) error {
+	return nil
+}
+
+func (m *UserModel) DisableUser(ctx context.Context, userID string) error {
+	query := `UPDATE users SET disabled = true WHERE id = $1`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+
+	result, err := m.db.ExecContext(ctx, query, userID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+
+	return nil
+}
+
+func (m *UserModel) EnableUser(ctx context.Context, userID string) error {
+	query := `UPDATE users SET disabled = false WHERE id = $1`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+
+	result, err := m.db.ExecContext(ctx, query, userID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+
+	return nil
 }

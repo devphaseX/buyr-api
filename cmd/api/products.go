@@ -129,19 +129,17 @@ func (app *application) createProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) publishProduct(w http.ResponseWriter, r *http.Request) {
-	user := getUserFromCtx(r)
+	var (
+		user      = getUserFromCtx(r)
+		productID = app.readStringID(r, "productID")
+	)
+
 	vendorUser, err := app.store.Users.GetVendorUserByID(r.Context(), user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	if !(vendorUser.UserID == user.ID || user.Role == store.AdminRole) {
-		app.notFoundResponse(w, r, "product not found")
-		return
-	}
-
-	productID := app.readStringID(r, "productID")
 	if err := app.store.Products.Publish(r.Context(), productID, vendorUser.ID); err != nil {
 		switch {
 		case errors.Is(err, store.ErrRecordNotFound):
@@ -161,19 +159,17 @@ func (app *application) publishProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) unPublishProduct(w http.ResponseWriter, r *http.Request) {
-	user := getUserFromCtx(r)
+	var (
+		user      = getUserFromCtx(r)
+		productID = app.readStringID(r, "productID")
+	)
+
 	vendorUser, err := app.store.Users.GetVendorUserByID(r.Context(), user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	if !(vendorUser.UserID == user.ID || user.Role == store.AdminRole) {
-		app.notFoundResponse(w, r, "product not found")
-		return
-	}
-
-	productID := app.readStringID(r, "productID")
 	if err := app.store.Products.Unpublish(r.Context(), productID, vendorUser.ID); err != nil {
 		switch {
 		case errors.Is(err, store.ErrRecordNotFound):

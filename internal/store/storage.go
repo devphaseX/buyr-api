@@ -25,6 +25,7 @@ type Storage struct {
 	Carts     CartStore
 	CartItems CartItemStore
 	Wishlists WhitelistStore
+	AuditLogs AuditEventStore
 }
 
 func NewStorage(db *sql.DB) *Storage {
@@ -37,6 +38,7 @@ func NewStorage(db *sql.DB) *Storage {
 		Carts:     NewCartModel(db),
 		CartItems: NewCartItemModel(db),
 		Wishlists: NewWishlistModel(db),
+		AuditLogs: NewAuditEventModel(db),
 	}
 }
 

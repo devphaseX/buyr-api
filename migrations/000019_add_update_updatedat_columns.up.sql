@@ -9,8 +9,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create triggers
-CREATE TRIGGER update_audits_updated_at
-BEFORE UPDATE ON audits
+CREATE TRIGGER update_audit_events_updated_at
+BEFORE UPDATE ON audit_events
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 

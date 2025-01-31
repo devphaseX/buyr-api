@@ -1,5 +1,5 @@
 -- Drop existing triggers (if they exist)
-DROP TRIGGER IF EXISTS update_audits_updated_at ON audits;
+DROP TRIGGER IF EXISTS update_audit_events_updated_at ON audits;
 
 DROP TRIGGER IF EXISTS update_wishlists_updated_at ON wishlists;
 

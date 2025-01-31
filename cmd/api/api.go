@@ -210,13 +210,13 @@ func (app *application) routes() http.Handler {
 
 				r.With(app.CheckPermissions(RequireRoles(store.VendorRole))).Group(func(r chi.Router) {
 					r.Post("/", app.createProduct)
-					r.Patch("/{id}/publish", app.publishProduct)
-					r.Patch("/{id}/unpublish", app.unPublishProduct)
+					r.Patch("/{productID}/publish", app.publishProduct)
+					r.Patch("/{productID}/unpublish", app.unPublishProduct)
 				})
 
 				r.With(app.CheckPermissions(RequireLevels(store.AdminLevelManager))).Group(func(r chi.Router) {
-					r.Patch("/{id}/approve", app.approveProduct)
-					r.Patch("/{id}/reject", app.rejectProduct)
+					r.Patch("/{productID}/approve", app.approveProduct)
+					r.Patch("/{productID}/reject", app.rejectProduct)
 				})
 			})
 
@@ -229,6 +229,12 @@ func (app *application) routes() http.Handler {
 			r.Route("/members", func(r chi.Router) {
 				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelSuper))).Post("/", app.createAdmin)
 				r.Get("/", app.getAdminUsers)
+				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelManager))).Route("/{memberID}", func(r chi.Router) {
+
+					r.Patch("/role", app.changeAdminRole)
+					r.Patch("/enable", app.enableAdminAccount)
+					r.Patch("/disable", app.disableAdminAccount)
+				})
 			})
 
 			r.Route("/products", func(r chi.Router) {
