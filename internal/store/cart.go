@@ -29,6 +29,7 @@ type CartItem struct {
 	ID        string    `json:"id"`
 	CartID    string    `json:"cart_id"`
 	ProductID string    `json:"product_id"`
+	Price     float64   `json:"-"`
 	AddedAt   time.Time `json:"added_at"`
 	Quantity  int       `json:"quantity"`
 	CreatedAt time.Time `json:"created_at"`
@@ -104,6 +105,7 @@ type CartItemStore interface {
 	GetGroupCartItems(ctx context.Context, cartID string, itemLimit int, filter PaginateQueryFilter) ([]*VendorWithItems, Metadata, error)
 	GetCartItems(ctx context.Context, cartID, vendorID string, filter PaginateQueryFilter) ([]*VendorGroupCartItem, Metadata, error)
 	SetItemQuantity(ctx context.Context, cartID, cartItemID string, quantity int) error
+	GetItemsByIDS(ctx context.Context, cartID string, ids []string) ([]*CartItem, error)
 }
 
 type CartItemModel struct {
@@ -666,4 +668,53 @@ func (m *CartItemModel) SetItemQuantity(ctx context.Context, cartID, cartItemID 
 		return ErrRecordNotFound
 	}
 	return nil
+}
+
+func (m *CartItemModel) GetItemsByIDS(ctx context.Context, cartID string, ids []string) ([]*CartItem, error) {
+	query := `SELECT
+				id,
+				cart_id,
+				product_id,
+				added_at,
+				quantity,
+				created_at,
+				updated_at
+				FROM
+			cart_items WHERE id @> $1::[]text AND cart_item = $2`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+
+	var (
+		cartItems = []*CartItem{}
+	)
+
+	rows, err := m.DB.QueryContext(ctx, query, ids, cartID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		cartItem := &CartItem{}
+
+		err := rows.Scan(&cartItem.ID, &cartItem.CartID, &cartItem.ProductID, &cartItem.AddedAt,
+			&cartItem.Quantity, &cartItem.CreatedAt, &cartItem.UpdatedAt)
+
+		if err != nil {
+			return nil, err
+		}
+
+		cartItems = append(cartItems, cartItem)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error after iterating over rows: %w", err)
+
+	}
+
+	return cartItems, nil
 }

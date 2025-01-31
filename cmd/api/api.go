@@ -179,6 +179,14 @@ func (app *application) routes() http.Handler {
 			})
 		})
 
+		r.Route("/orders", func(r chi.Router) {
+			r.Use(app.requireAuthenicatedUser)
+			r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
+				r.Post("/", app.createOrder)
+				r.Post("/{orderID}/pay", app.initiatePayment)
+			})
+		})
+
 		r.Route("/products", func(r chi.Router) {
 			r.Get("/", app.getProducts)
 

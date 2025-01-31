@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -17,28 +18,32 @@ var (
 )
 
 type Storage struct {
-	Users     UserStorage
-	Sessions  SessionStore
-	Category  CategoryStore
-	Products  ProductStore
-	Reviews   ReviewStore
-	Carts     CartStore
-	CartItems CartItemStore
-	Wishlists WhitelistStore
-	AuditLogs AuditEventStore
+	Users      UserStorage
+	Sessions   SessionStore
+	Category   CategoryStore
+	Products   ProductStore
+	Reviews    ReviewStore
+	Carts      CartStore
+	CartItems  CartItemStore
+	Wishlists  WhitelistStore
+	AuditLogs  AuditEventStore
+	Orders     OrderStore
+	OrderItems OrderItemStore
 }
 
 func NewStorage(db *sql.DB) *Storage {
 	return &Storage{
-		Users:     NewUserModel(db),
-		Sessions:  NewSessionModel(db),
-		Category:  NewCategoryModel(db),
-		Products:  NewProductModel(db),
-		Reviews:   NewReviewModel(db),
-		Carts:     NewCartModel(db),
-		CartItems: NewCartItemModel(db),
-		Wishlists: NewWishlistModel(db),
-		AuditLogs: NewAuditEventModel(db),
+		Users:      NewUserModel(db),
+		Sessions:   NewSessionModel(db),
+		Category:   NewCategoryModel(db),
+		Products:   NewProductModel(db),
+		Reviews:    NewReviewModel(db),
+		Carts:      NewCartModel(db),
+		CartItems:  NewCartItemModel(db),
+		Wishlists:  NewWishlistModel(db),
+		AuditLogs:  NewAuditEventModel(db),
+		Orders:     NewOrderModel(db),
+		OrderItems: NewOrderItemModel(db),
 	}
 }
 
@@ -55,4 +60,12 @@ func withTrx(db *sql.DB, ctx context.Context, fn func(tx *sql.Tx) error) error {
 	}
 
 	return tx.Commit()
+}
+
+func buildPlaceholders(n int) string {
+	placeholders := make([]string, n)
+	for i := 0; i < n; i++ {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+	return strings.Join(placeholders, ", ")
 }

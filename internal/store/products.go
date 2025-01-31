@@ -77,6 +77,7 @@ type ProductStore interface {
 	Approve(ctx context.Context, productID string) error
 	GetWithDetails(ctx context.Context, productID string) (*Product, error)
 	GetProductByID(ctx context.Context, productID string) (*Product, error)
+	GetProductsByIDS(ctx context.Context, ids []string) ([]*Product, error)
 	GetProducts(ctx context.Context, filter PaginateQueryFilter) ([]*Product, Metadata, error)
 }
 
@@ -475,6 +476,10 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 			(
 				$3 IS NULL OR p.vendor_id = $3
 			)
+
+			AND (
+				$5::[]text IS NULL OR id >@ $5
+			)
 		ORDER BY p.%s %s -- Sort by the specified column and direction
 		LIMIT $1 OFFSET $2 -- Pagination: limit and offset
 	`, ApprovedProductStatus, filter.SortColumn(), filter.SortDirection())
@@ -488,7 +493,7 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 
 	// Execute the query with the provided filters.
 	rows, err := s.db.QueryContext(ctx, query, filter.Limit(), filter.Offset(),
-		dataFilter.VendorID, dataFilter.AdminView)
+		dataFilter.VendorID, dataFilter.AdminView, dataFilter.ProductIds)
 
 	if err != nil {
 		return nil, Metadata{}, fmt.Errorf("failed to query products: %w", err)
@@ -570,4 +575,21 @@ func (m *ProductModel) GetProductByID(ctx context.Context, productID string) (*P
 	}
 
 	return product, nil
+}
+
+func (m *ProductModel) GetProductsByIDS(ctx context.Context, ids []string) ([]*Product, error) {
+	fq := PaginateQueryFilter{
+		Page:     1,
+		PageSize: len(ids),
+		Filters: &modelfilter.GetProductsFilter{
+			ProductIds: ids,
+		},
+	}
+	products, _, err := m.GetProducts(ctx, fq)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return products, nil
 }

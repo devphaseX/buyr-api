@@ -3,8 +3,9 @@ package modelfilter
 import "net/http"
 
 type GetProductsFilter struct {
-	VendorID  *string
-	AdminView bool
+	VendorID   *string
+	AdminView  bool
+	ProductIds []string
 }
 
 func (f *GetProductsFilter) ParseFilters(r *http.Request) error {

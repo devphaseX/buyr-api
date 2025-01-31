@@ -18,6 +18,11 @@ type TaskProcessor interface {
 	Start() error
 	Close()
 	ProcessTaskSendActivateAcctEmail(ctx context.Context, task *asynq.Task) error
+	ProcessTaskConfirmOrderPayment(ctx context.Context, task *asynq.Task) error
+	ProcessSendOrderConfirmationEmailTask(ctx context.Context, task *asynq.Task) error
+	ProcessTaskSendRecoverAccountEmail(ctx context.Context, task *asynq.Task) error
+	ProcessTaskSendVendorActivationEmail(ctx context.Context, task *asynq.Task) error
+	ProcessTaskSendAdminOnboardEmail(ctx context.Context, task *asynq.Task) error
 }
 
 type RedisTaskProcessor struct {
@@ -62,6 +67,8 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskSendRecoverAccountEmail, processor.ProcessTaskSendRecoverAccountEmail)
 	mux.HandleFunc(TaskSendVendorActivationEmail, processor.ProcessTaskSendVendorActivationEmail)
 	mux.HandleFunc(TaskSendAdminOnboardEmail, processor.ProcessTaskSendAdminOnboardEmail)
+	mux.HandleFunc(TaskProcessOrderPayment, processor.ProcessTaskConfirmOrderPayment)
+	mux.HandleFunc(TaskSendOrderConfirmationEmail, processor.ProcessSendOrderConfirmationEmailTask)
 	return processor.server.Start(mux)
 }
 

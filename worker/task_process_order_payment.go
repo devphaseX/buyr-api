@@ -1,0 +1,79 @@
+package worker
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/hibiken/asynq"
+)
+
+const TaskProcessOrderPayment = "task:process_payment"
+
+type ProcessPaymentPayload struct {
+	OrderID string  `json:"order_id"`
+	Amount  float64 `json:"amount"`
+}
+
+func (rt *RedisTaskDistributor) DistributeTaskProcessOrderPayment(ctx context.Context, payload *ProcessPaymentPayload, opts ...asynq.Option) error {
+	jsonPayload, err := json.Marshal(payload)
+
+	if err != nil {
+		return fmt.Errorf("failed to marshal task payload: %w", err)
+	}
+
+	processPaymentTask := asynq.NewTask(TaskProcessOrderPayment, jsonPayload, opts...)
+
+	taskInfo, err := rt.client.EnqueueContext(ctx,
+		processPaymentTask,
+		asynq.Unique(time.Second*5),
+		asynq.TaskID(payload.OrderID),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	rt.logger.Info(
+		"message", "enqueued task",
+		"type", taskInfo.Type,
+		"queue", taskInfo.Queue,
+		"max_retry", taskInfo.MaxRetry,
+	)
+
+	return nil
+
+}
+
+func (app *RedisTaskProcessor) ProcessTaskConfirmOrderPayment(ctx context.Context, task *asynq.Task) error {
+	var payload ProcessPaymentPayload
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+		return fmt.Errorf("failed to unmarshal payload: %w", err)
+	}
+
+	// Update the order status to "paid".
+	err := app.store.Orders.UpdateStatus(ctx, payload.OrderID, "paid")
+	if err != nil {
+		return fmt.Errorf("failed to update order status: %w", err)
+	}
+
+	// Log the payment processing.
+	app.logger.Info("payment processed successfully", "order_id", payload.OrderID)
+
+	// After updating the order status to "paid".
+	// payload, err := json.Marshal(SendOrderConfirmationEmailPayload{
+	// 		OrderID: orderID,
+	// 		Email:   user.Email,
+	// })
+	// if err != nil {
+	// 		return fmt.Errorf("failed to marshal payload: %w", err)
+	// }
+
+	// task := asynq.NewTask("send_order_confirmation_email", payload)
+	// if _, err := app.asynqClient.Enqueue(task); err != nil {
+	// 		return fmt.Errorf("failed to enqueue email task: %w", err)
+	// }
+
+	return nil
+}
