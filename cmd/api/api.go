@@ -47,6 +47,7 @@ type config struct {
 	authConfig     AuthConfig
 	encryptConfig  encryptConfig
 	supabaseConfig supabaseConfig
+	stripe         stripeConfig
 }
 
 type AuthConfig struct {
@@ -58,6 +59,13 @@ type AuthConfig struct {
 	AccesssCookieName string
 	RefreshCookiName  string
 	totpIssuerName    string
+}
+
+type stripeConfig struct {
+	apiKey        string
+	successURL    string
+	cancelURL     string
+	webhookSecret string
 }
 
 type encryptConfig struct {
@@ -180,8 +188,8 @@ func (app *application) routes() http.Handler {
 		})
 
 		r.Route("/orders", func(r chi.Router) {
-			r.Use(app.requireAuthenicatedUser)
-			r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
+			r.Post("/webhook/stripe", app.handleStripeWebhook)
+			r.With(app.requireAuthenicatedUser, app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
 				r.Post("/", app.createOrder)
 				r.Post("/{orderID}/pay", app.initiatePayment)
 			})

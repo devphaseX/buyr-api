@@ -6,14 +6,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/hibiken/asynq"
 )
 
 const TaskProcessOrderPayment = "task:process_payment"
 
 type ProcessPaymentPayload struct {
-	OrderID string  `json:"order_id"`
-	Amount  float64 `json:"amount"`
+	OrderID       string              `json:"order_id"`
+	Amount        float64             `json:"amount"`
+	TransactionID string              `json:"transaction_id"`
+	Status        store.PaymentStatus `json:"status"`
 }
 
 func (rt *RedisTaskDistributor) DistributeTaskProcessOrderPayment(ctx context.Context, payload *ProcessPaymentPayload, opts ...asynq.Option) error {
@@ -27,7 +30,7 @@ func (rt *RedisTaskDistributor) DistributeTaskProcessOrderPayment(ctx context.Co
 
 	taskInfo, err := rt.client.EnqueueContext(ctx,
 		processPaymentTask,
-		asynq.Unique(time.Second*5),
+		asynq.Unique(time.Minute*5),
 		asynq.TaskID(payload.OrderID),
 	)
 
@@ -53,13 +56,20 @@ func (app *RedisTaskProcessor) ProcessTaskConfirmOrderPayment(ctx context.Contex
 	}
 
 	// Update the order status to "paid".
-	err := app.store.Orders.UpdateStatus(ctx, payload.OrderID, "paid")
+	err := app.store.Payments.Create(ctx, &store.Payment{
+		OrderID:       payload.OrderID,
+		TransactionID: payload.TransactionID,
+		Status:        payload.Status,
+		PaymentMethod: "stripe",
+		Amount:        payload.Amount,
+	})
+
 	if err != nil {
 		return fmt.Errorf("failed to update order status: %w", err)
 	}
 
 	// Log the payment processing.
-	app.logger.Info("payment processed successfully", "order_id", payload.OrderID)
+	app.logger.Info("payment processed", "successfully", "order_id", payload.OrderID)
 
 	// After updating the order status to "paid".
 	// payload, err := json.Marshal(SendOrderConfirmationEmailPayload{

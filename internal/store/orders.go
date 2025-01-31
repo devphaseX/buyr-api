@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -41,15 +42,18 @@ type OrderItem struct {
 	Price     float64   `json:"price"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	Product   Product   `json:"product"`
 }
 
 type OrderStore interface {
 	Create(ctx context.Context, productStore ProductStore, order *Order, cartItems []*CartItem) error
-	GetByID(ctx context.Context, userId, id string) (*Order, error)
+	GetUserOrderByID(ctx context.Context, userId, id string) (*Order, error)
+	GetOrderByID(ctx context.Context, id string) (*Order, error)
 	UpdateStatus(ctx context.Context, orderID string, status OrderStatus) error
 }
 
 type OrderItemStore interface {
+	GetItemsByOrderID(ctx context.Context, orderID string) ([]*CartItem, error)
 }
 
 type OrderModel struct {
@@ -122,9 +126,9 @@ func createOrderItems(ctx context.Context, tx *sql.Tx, orderID string, cartItems
 
 			orderItem.ID = db.GenerateULID()
 
-			args := []any{orderItem.ID, orderItem.OrderID, orderItem.ProductID, orderItem.Quantity, orderItem.Quantity}
+			args := []any{orderItem.ID, orderItem.OrderID, orderItem.ProductID, orderItem.Quantity, orderItem.Price}
 
-			err := tx.QueryRowContext(ctx, query, args...).Scan(orderItem.CreatedAt, orderItem.UpdatedAt)
+			err := tx.QueryRowContext(ctx, query, args...).Scan(&orderItem.CreatedAt, &orderItem.UpdatedAt)
 
 			if err != nil {
 				errCh <- err
@@ -152,7 +156,7 @@ func createOrderItems(ctx context.Context, tx *sql.Tx, orderID string, cartItems
 	return nil
 }
 
-func (m *OrderModel) GetByID(ctx context.Context, userId, id string) (*Order, error) {
+func (m *OrderModel) GetUserOrderByID(ctx context.Context, userId, id string) (*Order, error) {
 	query := `SELECT
 				id,
 				user_id,
@@ -174,7 +178,61 @@ func (m *OrderModel) GetByID(ctx context.Context, userId, id string) (*Order, er
 
 	order := &Order{}
 
-	err := m.db.QueryRowContext(ctx, query, userId, id).Scan(&order.ID, &order.UserID, &order.TotalAmount, &order.PromoCode, &order.Discount, &order.Status, &order.Paid,
+	var discount sql.NullFloat64
+	var promoCode sql.NullString
+	var paymentMethod sql.NullString
+
+	err := m.db.QueryRowContext(ctx, query, id, userId).Scan(&order.ID, &order.UserID, &order.TotalAmount, &promoCode, &discount, &order.Status, &order.Paid,
+		&paymentMethod, &order.CreatedAt, &order.UpdatedAt)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+
+		default:
+			return nil, err
+		}
+	}
+
+	if discount.Valid {
+		order.Discount = discount.Float64
+	}
+
+	if promoCode.Valid {
+		order.PromoCode = promoCode.String
+	}
+
+	if paymentMethod.Valid {
+		order.PaymentMethod = paymentMethod.String
+	}
+
+	return order, nil
+}
+
+func (m *OrderModel) GetOrderByID(ctx context.Context, id string) (*Order, error) {
+	query := `SELECT
+				id,
+				user_id,
+				total_amount,
+				promo_code,
+				discount,
+				status,
+				paid,
+				payment_method,
+				created_at,
+				updated_at
+				FROM orders
+			 	WHERE id = $1
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+
+	order := &Order{}
+
+	err := m.db.QueryRowContext(ctx, query, id).Scan(&order.ID, &order.UserID, &order.TotalAmount, &order.PromoCode, &order.Discount, &order.Status, &order.Paid,
 		&order.PaymentMethod, &order.CreatedAt, &order.UpdatedAt)
 
 	if err != nil {
@@ -191,12 +249,12 @@ func (m *OrderModel) GetByID(ctx context.Context, userId, id string) (*Order, er
 }
 
 func (m *OrderModel) UpdateStatus(ctx context.Context, orderID string, status OrderStatus) error {
-	query := `UPDATE orders SET status = $1 WHERE id = $1`
+	query := `UPDATE orders SET status = $1 WHERE id = $2`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
-	result, err := m.db.ExecContext(ctx, query, orderID)
+	result, err := m.db.ExecContext(ctx, query, status, orderID)
 
 	if err != nil {
 		return err
@@ -213,4 +271,83 @@ func (m *OrderModel) UpdateStatus(ctx context.Context, orderID string, status Or
 	}
 
 	return nil
+}
+
+func (m *OrderItemModel) GetItemsByOrderID(ctx context.Context, orderID string) ([]*CartItem, error) {
+	// SQL query to fetch OrderItems and their associated Products by orderID
+	query := `
+        SELECT
+            oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price, oi.created_at, oi.updated_at,
+            p.id, p.name, p.description, p.stock_quantity, p.status, p.published,
+            p.total_items_sold_count, p.vendor_id, p.discount, p.price, p.category_id,
+            p.created_at, p.updated_at
+        FROM
+            order_items oi
+        JOIN
+            products p ON oi.product_id = p.id
+        WHERE
+            oi.order_id = $1
+    `
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+	// Execute the query
+	rows, err := m.db.QueryContext(ctx, query, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query order items: %w", err)
+	}
+	defer rows.Close()
+
+	var cartItems []*CartItem
+	for rows.Next() {
+		var orderItem OrderItem
+		var product Product
+
+		// Scan the row into the OrderItem and Product structs
+		err := rows.Scan(
+			&orderItem.ID,
+			&orderItem.OrderID,
+			&orderItem.ProductID,
+			&orderItem.Quantity,
+			&orderItem.Price,
+			&orderItem.CreatedAt,
+			&orderItem.UpdatedAt,
+			&product.ID,
+			&product.Name,
+			&product.Description,
+			&product.StockQuantity,
+			&product.Status,
+			&product.Published,
+			&product.TotalItemsSoldCount,
+			&product.VendorID,
+			&product.Discount,
+			&product.Price,
+			&product.CategoryID,
+			&product.CreatedAt,
+			&product.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan order item and product: %w", err)
+		}
+
+		// Assign the product to the order item
+		orderItem.Product = product
+
+		// Convert OrderItem to CartItem
+		cartItem := &CartItem{
+			ID:        orderItem.ID,
+			ProductID: orderItem.ProductID,
+			Quantity:  orderItem.Quantity,
+			Price:     orderItem.Price,
+			Product:   &orderItem.Product,
+		}
+		cartItems = append(cartItems, cartItem)
+	}
+
+	// Check for errors after iterating through rows
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return cartItems, nil
 }

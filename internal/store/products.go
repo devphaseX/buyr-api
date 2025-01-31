@@ -478,7 +478,7 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 			)
 
 			AND (
-				$5::[]text IS NULL OR id >@ $5
+	  			 $5::text[] IS NULL OR p.id = ANY($5::text[])
 			)
 		ORDER BY p.%s %s -- Sort by the specified column and direction
 		LIMIT $1 OFFSET $2 -- Pagination: limit and offset
@@ -493,7 +493,7 @@ func (s *ProductModel) GetProducts(ctx context.Context, filter PaginateQueryFilt
 
 	// Execute the query with the provided filters.
 	rows, err := s.db.QueryContext(ctx, query, filter.Limit(), filter.Offset(),
-		dataFilter.VendorID, dataFilter.AdminView, dataFilter.ProductIds)
+		dataFilter.VendorID, dataFilter.AdminView, pq.Array(dataFilter.ProductIds))
 
 	if err != nil {
 		return nil, Metadata{}, fmt.Errorf("failed to query products: %w", err)
@@ -579,8 +579,10 @@ func (m *ProductModel) GetProductByID(ctx context.Context, productID string) (*P
 
 func (m *ProductModel) GetProductsByIDS(ctx context.Context, ids []string) ([]*Product, error) {
 	fq := PaginateQueryFilter{
-		Page:     1,
-		PageSize: len(ids),
+		Page:         1,
+		PageSize:     len(ids),
+		Sort:         "created_at",
+		SortSafelist: []string{"created_at", "-created_at"},
 		Filters: &modelfilter.GetProductsFilter{
 			ProductIds: ids,
 		},

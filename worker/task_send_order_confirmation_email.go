@@ -54,7 +54,7 @@ func (app *RedisTaskProcessor) ProcessSendOrderConfirmationEmailTask(ctx context
 	}
 
 	// Fetch the order details.
-	order, err := app.store.Orders.GetByID(ctx, payload.UserID, payload.OrderID)
+	order, err := app.store.Orders.GetOrderByID(ctx, payload.OrderID)
 	if err != nil {
 		return fmt.Errorf("failed to fetch order: %w", err)
 	}

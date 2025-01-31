@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/devphaseX/buyr-api.git/worker"
 	"github.com/go-playground/form/v4"
 	"github.com/hibiken/asynq"
+	"github.com/stripe/stripe-go/v81"
 	"go.uber.org/zap"
 )
 
@@ -24,7 +26,7 @@ var validate = validator.New()
 
 func main() {
 	cfg := config{
-		apiURL:    env.GetString("API_URL", "localhost:8080"),
+		apiURL:    env.GetString("API_URL", "http://localhost:8080"),
 		clientURL: env.GetString("CLIENT_URL", "http://localhost:3000"),
 		addr:      env.GetString("ADDR", ":8080"),
 		env:       env.GetString("ENV", "development"),
@@ -74,6 +76,13 @@ func main() {
 			apiKey:                 env.GetString("SUPABASE_API_KEY", ""),
 			profileImageBucketName: env.GetString("SUPABASE_PROFILE_BUCKET_NAME", ""),
 		},
+
+		stripe: stripeConfig{
+			apiKey:        env.GetString("STRIPE_SECRET_KEY", ""),
+			webhookSecret: env.GetString("STRIPE_WEBHOOK_SECRET", ""),
+			successURL:    env.GetString("STRIPE_SUCCESS_URL", ""),
+			cancelURL:     env.GetString("STRIPE_CANCEL_URL", ""),
+		},
 	}
 
 	logger := zap.Must(zap.NewProduction()).Sugar()
@@ -113,6 +122,14 @@ func main() {
 	if err != nil {
 		logger.Panic(err)
 	}
+
+	stripe.Key = cfg.stripe.apiKey
+	// For sample support and debugging, not required for production:
+	stripe.SetAppInfo(&stripe.AppInfo{
+		Name:    "Buyr",
+		Version: "0.0.1",
+		URL:     fmt.Sprintf("%s/webhook/stripe", cfg.apiURL),
+	})
 	app := &application{
 		cfg:             cfg,
 		totp:            totp,

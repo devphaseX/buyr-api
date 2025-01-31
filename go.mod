@@ -18,6 +18,7 @@ require (
 	github.com/pquerna/otp v1.4.0
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+	github.com/stripe/stripe-go/v81 v81.3.0
 	github.com/supabase-community/storage-go v0.7.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.32.0

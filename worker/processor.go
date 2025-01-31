@@ -57,6 +57,7 @@ func NewRedisTaskProcessor(redisOpt asynq.RedisClientOpt, store *store.Storage, 
 		store:      store,
 		cachestore: cacheStore,
 		mailClient: mailClient,
+		logger:     NewLogger(),
 	}
 }
 

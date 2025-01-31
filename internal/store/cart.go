@@ -34,6 +34,7 @@ type CartItem struct {
 	Quantity  int       `json:"quantity"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	Product   *Product  `json:"product,omitempty"`
 }
 
 type CartStore interface {
@@ -671,41 +672,47 @@ func (m *CartItemModel) SetItemQuantity(ctx context.Context, cartID, cartItemID 
 }
 
 func (m *CartItemModel) GetItemsByIDS(ctx context.Context, cartID string, ids []string) ([]*CartItem, error) {
-	query := `SELECT
-				id,
-				cart_id,
-				product_id,
-				added_at,
-				quantity,
-				created_at,
-				updated_at
-				FROM
-			cart_items WHERE id @> $1::[]text AND cart_item = $2`
+	query := `
+        SELECT
+            id,
+            cart_id,
+            product_id,
+            added_at,
+            quantity,
+            created_at,
+            updated_at
+        FROM
+            cart_items
+        WHERE
+            id = ANY($1::text[]) AND cart_id = $2
+    `
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
-
 	defer cancel()
 
-	var (
-		cartItems = []*CartItem{}
-	)
+	var cartItems []*CartItem
 
-	rows, err := m.DB.QueryContext(ctx, query, ids, cartID)
-
+	rows, err := m.DB.QueryContext(ctx, query, pq.Array(ids), cartID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query cart items: %w", err)
 	}
-
 	defer rows.Close()
 
 	for rows.Next() {
 		cartItem := &CartItem{}
 
-		err := rows.Scan(&cartItem.ID, &cartItem.CartID, &cartItem.ProductID, &cartItem.AddedAt,
-			&cartItem.Quantity, &cartItem.CreatedAt, &cartItem.UpdatedAt)
+		err := rows.Scan(
+			&cartItem.ID,
+			&cartItem.CartID,
+			&cartItem.ProductID,
+			&cartItem.AddedAt,
+			&cartItem.Quantity,
+			&cartItem.CreatedAt,
+			&cartItem.UpdatedAt,
+		)
 
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan cart item: %w", err)
 		}
 
 		cartItems = append(cartItems, cartItem)
@@ -713,7 +720,85 @@ func (m *CartItemModel) GetItemsByIDS(ctx context.Context, cartID string, ids []
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error after iterating over rows: %w", err)
+	}
 
+	return cartItems, nil
+}
+
+func (m *OrderItemModel) GetItemByOrderID(ctx context.Context, orderID string) ([]*CartItem, error) {
+	// SQL query to fetch OrderItems and their associated Products by orderID
+	query := `
+        SELECT
+            oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price, oi.created_at, oi.updated_at,
+            p.id, p.name, p.description, p.stock_quantity, p.status, p.published,
+            p.total_items_sold_count, p.vendor_id, p.discount, p.price, p.category_id,
+            p.created_at, p.updated_at
+        FROM
+            order_items oi
+        JOIN
+            products p ON oi.product_id = p.id
+        WHERE
+            oi.order_id = $1
+    `
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+	// Execute the query
+	rows, err := m.db.QueryContext(ctx, query, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query order items: %w", err)
+	}
+	defer rows.Close()
+
+	var cartItems []*CartItem
+	for rows.Next() {
+		var orderItem OrderItem
+		var product Product
+
+		// Scan the row into the OrderItem and Product structs
+		err := rows.Scan(
+			&orderItem.ID,
+			&orderItem.OrderID,
+			&orderItem.ProductID,
+			&orderItem.Quantity,
+			&orderItem.Price,
+			&orderItem.CreatedAt,
+			&orderItem.UpdatedAt,
+			&product.ID,
+			&product.Name,
+			&product.Description,
+			&product.StockQuantity,
+			&product.Status,
+			&product.Published,
+			&product.TotalItemsSoldCount,
+			&product.VendorID,
+			&product.Discount,
+			&product.Price,
+			&product.CategoryID,
+			&product.CreatedAt,
+			&product.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan order item and product: %w", err)
+		}
+
+		// Assign the product to the order item
+		orderItem.Product = product
+
+		// Convert OrderItem to CartItem
+		cartItem := &CartItem{
+			ID:        orderItem.ID,
+			ProductID: orderItem.ProductID,
+			Quantity:  orderItem.Quantity,
+			Price:     orderItem.Price,
+			Product:   &orderItem.Product,
+		}
+		cartItems = append(cartItems, cartItem)
+	}
+
+	// Check for errors after iterating through rows
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
 	}
 
 	return cartItems, nil
