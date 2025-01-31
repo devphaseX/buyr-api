@@ -247,19 +247,19 @@ func (app *application) disableAdminAccount(w http.ResponseWriter, r *http.Reque
 
 	// 1. Ensure the current admin is not trying to change their own role.
 	if currentAdminUser.AdminUser.ID == adminUser.ID {
-		app.forbiddenResponse(w, r, "you cannot disable yourself")
+		app.forbiddenResponse(w, r, "you cannot disable your own account")
 		return
 	}
 
 	if !currentAdminUser.AdminUser.AdminLevel.CanModifyAdminLevel(adminUser.AdminLevel) {
-		app.forbiddenResponse(w, r, "you cannot disable this admin account")
+		app.forbiddenResponse(w, r, "you are not authorized to disable this admin account")
 		return
 	}
 
 	if adminUser.AdminLevel == store.AdminLevelSuper {
 		if currentAdminUser.AdminUser.AdminLevel != store.AdminLevelSuper ||
 			currentAdminUser.AdminUser.CreatedAt.After(adminUser.CreatedAt) {
-			app.forbiddenResponse(w, r, "you cannot disable this admin account")
+			app.forbiddenResponse(w, r, "you are not authorized to disable a super admin's account")
 			return
 		}
 	}
@@ -286,19 +286,23 @@ func (app *application) disableAdminAccount(w http.ResponseWriter, r *http.Reque
 	})
 
 	response := envelope{
-		"message": "user account disabled successfully",
+		"message": "admin account disabled successfully",
 		"data": map[string]interface{}{
 			"admin_id": memberID,
-			// "new_level": form.Level,
+			"reason":   form.Reason,
 		},
 	}
 	app.successResponse(w, http.StatusOK, response)
 }
 
+type enableAdminAccountRequest struct {
+	Reason string `json:"reason" validate:"required"`
+}
+
 func (app *application) enableAdminAccount(w http.ResponseWriter, r *http.Request) {
 	currentAdminUser := getUserFromCtx(r)
 	memberID := app.readStringID(r, "memberID")
-	var form changeAdminRoleRequest
+	var form enableAdminAccountRequest
 
 	if err := app.readJSON(w, r, &form); err != nil {
 		app.badRequestResponse(w, r, err)
@@ -317,41 +321,45 @@ func (app *application) enableAdminAccount(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// 1. Ensure the current admin is not trying to change their own role.
+	// Authorization checks:
+	// 1. Ensure the current admin is not trying to enable their own account.
 	if currentAdminUser.AdminUser.ID == adminUser.ID {
-		app.serverErrorResponse(w, r, errors.New("you cannot enable yourself"))
+		app.forbiddenResponse(w, r, "you cannot enable your own account")
 		return
 	}
 
+	// 2. Ensure the current admin has the authority to enable the target admin's account.
 	if !currentAdminUser.AdminUser.AdminLevel.CanModifyAdminLevel(adminUser.AdminLevel) {
-		app.forbiddenResponse(w, r, "you cannot enable this admin account")
+		app.forbiddenResponse(w, r, "you are not authorized to enable this admin account")
 		return
 	}
 
-	err = app.store.Users.EnableUser(r.Context(), adminUser.UserID)
-
-	if err != nil {
+	// Enable the admin account in the database.
+	if err := app.store.Users.EnableUser(r.Context(), adminUser.UserID); err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
+	// Log the account enable event in the background.
 	app.background(func() {
 		if err := app.store.AuditLogs.LogEvent(r.Context(), store.AuditEvent{
-			EventType:   store.AccountEnabledAuditEventType,
-			PerformedBy: currentAdminUser.AdminUser.ID,
-			Timestamp:   time.Now().UTC(),
-			IPAddress:   r.RemoteAddr,
-			UserAgent:   r.UserAgent(),
+			EventType:        store.AccountEnabledAuditEventType,
+			PerformedBy:      currentAdminUser.AdminUser.ID,
+			Reason:           form.Reason, // Include the reason for enabling the account
+			Timestamp:        time.Now().UTC(),
+			AdminLevelAccess: currentAdminUser.AdminUser.AdminLevel,
+			IPAddress:        r.RemoteAddr,
+			UserAgent:        r.UserAgent(),
 		}); err != nil {
 			app.logger.Error("failed to log audit event", "error", err)
 		}
 	})
 
 	response := envelope{
-		"message": "user account enabled successfully",
+		"message": "admin account enabled successfully",
 		"data": map[string]interface{}{
-			"admin_id":  memberID,
-			"new_level": form.Level,
+			"admin_id": memberID,
+			"reason":   form.Reason,
 		},
 	}
 	app.successResponse(w, http.StatusOK, response)
