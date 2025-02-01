@@ -161,7 +161,7 @@ func main() {
 			cfg.mailConfig.mailTrap.isSandbox,
 			logger,
 		)
-		app.runTaskProcessor(redisOpts, ctx, store, cacheStore, mailClient)
+		app.runTaskProcessor(redisOpts, taskDistributor, ctx, store, cacheStore, mailClient)
 	})
 
 	go app.background(func() {
@@ -177,6 +177,7 @@ func main() {
 
 func (app *application) runTaskProcessor(
 	redisOpt asynq.RedisClientOpt,
+	taskDistributor worker.TaskDistributor,
 	ctx context.Context,
 	store *store.Storage,
 	cacheStore *cache.Storage,
@@ -184,7 +185,7 @@ func (app *application) runTaskProcessor(
 ) {
 
 	cronTaskProcessor := scheduler.NewAsyncTaskProcessor(redisOpt, store)
-	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, cronTaskProcessor, store, cacheStore, mailClient)
+	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, cronTaskProcessor, taskDistributor, store, cacheStore, mailClient)
 
 	app.logger.Info("start task processor")
 

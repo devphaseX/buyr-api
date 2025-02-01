@@ -373,7 +373,7 @@ func (s *ProductModel) GetWithDetails(ctx context.Context, productID string) (*P
 			products p
 			LEFT JOIN category c ON c.id = p.category_id
 		WHERE
-			p.id = $1 AND (c.id IS null || c.visible = true);
+			p.id = $1 AND (c.id IS null OR c.visible = true);
 	`
 	row := s.db.QueryRowContext(ctx, query, productID)
 	var (

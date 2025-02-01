@@ -275,15 +275,6 @@ func (app *application) handleStripeWebhook(w http.ResponseWriter, r *http.Reque
 
 		if PaymentStatus == "paid" {
 			status = store.CompletedPaymentStatus
-		} else {
-			order, err := app.store.Orders.GetOrderByID(r.Context(), orderID)
-
-			if err != nil && order.PromoCode != "" {
-				err = app.store.Promos.ReleaseUsage(r.Context(), order.PromoCode)
-				if err != nil {
-					app.logger.Error("failed to release promo code usage", "error", err)
-				}
-			}
 		}
 
 		err := app.taskDistributor.DistributeTaskProcessOrderPayment(r.Context(), &worker.ProcessPaymentPayload{

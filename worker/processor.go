@@ -30,15 +30,16 @@ type TaskProcessor interface {
 }
 
 type RedisTaskProcessor struct {
-	server         *asynq.Server
-	store          *store.Storage
-	cachestore     *cache.Storage
-	logger         asynq.Logger
-	mailClient     mailer.Client
-	cronTaskRunner CronTaskRunner
+	server          *asynq.Server
+	store           *store.Storage
+	cachestore      *cache.Storage
+	logger          asynq.Logger
+	mailClient      mailer.Client
+	taskDistributor TaskDistributor
+	cronTaskRunner  CronTaskRunner
 }
 
-func NewRedisTaskProcessor(redisOpt asynq.RedisClientOpt, cronTaskRunner CronTaskRunner, store *store.Storage, cacheStore *cache.Storage, mailClient mailer.Client) TaskProcessor {
+func NewRedisTaskProcessor(redisOpt asynq.RedisClientOpt, cronTaskRunner CronTaskRunner, taskDistributor TaskDistributor, store *store.Storage, cacheStore *cache.Storage, mailClient mailer.Client) TaskProcessor {
 	logger := NewLogger()
 	server := asynq.NewServer(redisOpt, asynq.Config{
 		Queues: map[string]int{
@@ -59,12 +60,13 @@ func NewRedisTaskProcessor(redisOpt asynq.RedisClientOpt, cronTaskRunner CronTas
 	})
 
 	return &RedisTaskProcessor{
-		server:         server,
-		store:          store,
-		cachestore:     cacheStore,
-		cronTaskRunner: cronTaskRunner,
-		mailClient:     mailClient,
-		logger:         NewLogger(),
+		server:          server,
+		store:           store,
+		cachestore:      cacheStore,
+		cronTaskRunner:  cronTaskRunner,
+		taskDistributor: taskDistributor,
+		mailClient:      mailClient,
+		logger:          NewLogger(),
 	}
 }
 

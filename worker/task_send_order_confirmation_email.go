@@ -14,11 +14,9 @@ var TaskSendOrderConfirmationEmail = "send_order_confirmation_email"
 
 type SendOrderConfirmationEmailPayload struct {
 	OrderID string `json:"order_id"`
-	UserID  string `json:"user_id"`
-	Email   string `json:"email"`
 }
 
-func (rt *RedisTaskDistributor) DistributeTaskOrderConfirmationEmail(ctx context.Context, payload *PayloadSendActivateAcctEmail, opts ...asynq.Option) error {
+func (rt *RedisTaskDistributor) DistributeTaskOrderConfirmationEmail(ctx context.Context, payload *SendOrderConfirmationEmailPayload, opts ...asynq.Option) error {
 	jsonPayload, err := json.Marshal(payload)
 
 	if err != nil {
@@ -29,8 +27,8 @@ func (rt *RedisTaskDistributor) DistributeTaskOrderConfirmationEmail(ctx context
 
 	taskInfo, err := rt.client.EnqueueContext(ctx,
 		orderConfirmationEmailTask,
-		asynq.Unique(time.Second*5),
-		asynq.TaskID(payload.Token),
+		asynq.Unique(time.Second*10),
+		asynq.TaskID(payload.OrderID),
 	)
 
 	if err != nil {
@@ -59,10 +57,14 @@ func (app *RedisTaskProcessor) ProcessSendOrderConfirmationEmailTask(ctx context
 		return fmt.Errorf("failed to fetch order: %w", err)
 	}
 
+	user, err := app.store.Users.GetByID(ctx, order.ID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch user: %w", err)
+	}
+
 	// Send the order confirmation email.
-	// //payload.Email, ,
 	err = app.mailClient.Send(&mailer.MailOption{
-		To:           []string{payload.Email},
+		To:           []string{user.Email},
 		TemplateFile: "order_confirmation.html",
 	}, map[string]interface{}{
 		"OrderID": order.ID,
@@ -74,7 +76,7 @@ func (app *RedisTaskProcessor) ProcessSendOrderConfirmationEmailTask(ctx context
 	}
 
 	// Log the email sending.
-	app.logger.Info("order confirmation email sent", "order_id", payload.OrderID, "email", payload.Email)
+	app.logger.Info("order confirmation email sent", "order_id", payload.OrderID, "email", user.Email)
 
 	return nil
 }

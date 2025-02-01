@@ -49,41 +49,43 @@ func (rt *RedisTaskDistributor) DistributeTaskProcessOrderPayment(ctx context.Co
 
 }
 
-func (app *RedisTaskProcessor) ProcessTaskConfirmOrderPayment(ctx context.Context, task *asynq.Task) error {
+func (rt *RedisTaskProcessor) ProcessTaskConfirmOrderPayment(ctx context.Context, task *asynq.Task) error {
 	var payload ProcessPaymentPayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal payload: %w", err)
 	}
 
 	// Update the order status to "paid".
-	err := app.store.Payments.Create(ctx, &store.Payment{
+	payment := &store.Payment{
 		OrderID:       payload.OrderID,
 		TransactionID: payload.TransactionID,
 		Status:        payload.Status,
 		PaymentMethod: "stripe",
 		Amount:        payload.Amount,
-	})
+	}
+	err := rt.store.Payments.Create(ctx, payment)
 
 	if err != nil {
 		return fmt.Errorf("failed to update order status: %w", err)
 	}
 
 	// Log the payment processing.
-	app.logger.Info("payment processed", "successfully", "order_id", payload.OrderID)
+	rt.logger.Info("payment processed", "successfully", "order_id", payload.OrderID)
 
-	// After updating the order status to "paid".
-	// payload, err := json.Marshal(SendOrderConfirmationEmailPayload{
-	// 		OrderID: orderID,
-	// 		Email:   user.Email,
-	// })
-	// if err != nil {
-	// 		return fmt.Errorf("failed to marshal payload: %w", err)
-	// }
+	if payment.Status == store.FailedPaymentStatus {
+		order, err := rt.store.Orders.GetOrderByID(ctx, payload.OrderID)
 
-	// task := asynq.NewTask("send_order_confirmation_email", payload)
-	// if _, err := app.asynqClient.Enqueue(task); err != nil {
-	// 		return fmt.Errorf("failed to enqueue email task: %w", err)
-	// }
+		if err != nil && order.PromoCode != "" {
+			err = rt.store.Promos.ReleaseUsage(ctx, order.PromoCode)
+			if err != nil {
+				rt.logger.Error("failed to release promo code usage", "error", err)
+			}
+		}
+	}
+
+	_ = rt.taskDistributor.DistributeTaskOrderConfirmationEmail(ctx, &SendOrderConfirmationEmailPayload{
+		OrderID: payload.OrderID,
+	})
 
 	return nil
 }

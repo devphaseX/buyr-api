@@ -314,9 +314,9 @@ func (m *CategoryModel) GetByID(ctx context.Context, categoryID string) (*Catego
             	c.description,
             	c.visible,
             	c.created_at,
-            	c.updated_at,
-             FROM categories C
-             WHERE C.id = $1`
+            	c.updated_at
+             FROM category c
+             WHERE c.id = $1`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
