@@ -73,6 +73,18 @@ func (u *User) IsAnonymous() bool {
 	return u == AnonymousUser
 }
 
+type Account struct {
+	UserID            string `json:"user_id"`
+	Type              string `json:"type"`
+	Provider          string `json:"provider"`
+	ProviderAccountID string `json:"provider_account_id"`
+	RefreshToken      string `json:"refresh_token"`
+	AccessToken       string `json:"access_token"`
+	ExpiresAt         int64  `json:"expires_at"`
+	TokenType         string `json:"token_type"`
+	Scope             string `json:"scope"`
+}
+
 // NormalUser represents a normal user in the system.
 type NormalUser struct {
 	ID          string    `json:"id"`
@@ -284,6 +296,7 @@ type UserStorage interface {
 	DisableUser(ctx context.Context, userID string) error
 	EnableUser(ctx context.Context, userID string) error
 	GetVendorByID(ctx context.Context, ID string) (*VendorUser, error)
+	UpsertAccount(ctx context.Context, account *Account) error
 
 	FlattenUser(ctx context.Context, user *User) (*FlattenedUser, error)
 	ResetRecoveryCodes(context.Context, string, []string) error
@@ -305,7 +318,7 @@ func NewUserModel(db *sql.DB) UserStorage {
 // createUser inserts a new user into the database.
 func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	query := `
-		INSERT INTO users(id, email, password_hash, role, force_password_change)
+		INSERT INTO users(id, email, password_hash, is_active, email_verified_at role, force_password_change)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at, updated_at
 	`
@@ -315,7 +328,7 @@ func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	}
 
 	id := db.GenerateULID()
-	args := []any{id, user.Email, user.Password.hash, user.Role, user.ForcePasswordChange}
+	args := []any{id, user.Email, user.Password.hash, user.IsActive, user.EmailVerifiedAt, user.Role, user.ForcePasswordChange}
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
@@ -332,6 +345,34 @@ func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 
+	return nil
+}
+
+func (s *UserModel) UpsertAccount(ctx context.Context, account *Account) error {
+	query := `INSERT INTO accounts (
+	user_id, type, provider, provider_account_id,
+    access_token, refresh_token, expires_at, token_type, scope
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	ON CONFLICT (provider, provider_account_id)
+	DO UPDATE SET
+		access_token = EXCLUDED.access_token,
+		expires_at = EXCLUDED.expires_at,
+		token_type = EXCLUDED.token_type,
+		scope = EXCLUDED.scope
+		`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	args := []any{account.UserID, account.Type, account.Provider,
+		account.ProviderAccountID, account.AccessToken, account.RefreshToken,
+		account.ExpiresAt, account.TokenType, account.Scope}
+
+	_, err := s.db.ExecContext(ctx, query, args...)
+
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

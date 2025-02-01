@@ -21,6 +21,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/stripe/stripe-go/v81"
 	"go.uber.org/zap"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 var validate = validator.New()
@@ -84,6 +86,11 @@ func main() {
 			successURL:    env.GetString("STRIPE_SUCCESS_URL", ""),
 			cancelURL:     env.GetString("STRIPE_CANCEL_URL", ""),
 		},
+
+		googleOauthConfig: googleOauthConfig{
+			clientId:     env.GetString("GOOGLE_CLIENT_ID", ""),
+			clientSecret: env.GetString("GOOGLE_CLIENT_SECRET", ""),
+		},
 	}
 
 	logger := zap.Must(zap.NewProduction()).Sugar()
@@ -136,6 +143,15 @@ func main() {
 		Version: "0.0.1",
 		URL:     fmt.Sprintf("%s/webhook/stripe", cfg.apiURL),
 	})
+
+	oauthConfig := &oauth2.Config{
+		ClientID:     cfg.googleOauthConfig.clientId,
+		ClientSecret: cfg.googleOauthConfig.clientSecret,
+		RedirectURL:  fmt.Sprintf("%s/v1/auth/google/callback", cfg.apiURL),
+		Scopes:       []string{"email", "profile"},
+		Endpoint:     google.Endpoint,
+	}
+
 	app := &application{
 		cfg:             cfg,
 		totp:            totp,
@@ -144,6 +160,7 @@ func main() {
 		cacheStore:      cacheStore,
 		formDecoder:     formDecoder,
 		fileobject:      fileobject,
+		googleOauth:     oauthConfig,
 		taskDistributor: taskDistributor,
 		authToken:       authToken,
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-playground/form/v4"
 	"go.uber.org/zap"
+	"golang.org/x/oauth2"
 )
 
 type application struct {
@@ -30,6 +31,7 @@ type application struct {
 	logger          *zap.SugaredLogger
 	store           *store.Storage
 	authToken       auth.AuthToken
+	googleOauth     *oauth2.Config
 	fileobject      fileobject.FileObject
 	formDecoder     *form.Decoder
 	cacheStore      *cache.Storage
@@ -37,17 +39,18 @@ type application struct {
 }
 
 type config struct {
-	addr           string
-	env            string
-	apiURL         string
-	clientURL      string
-	db             dbConfig
-	redisCfg       redisConfig
-	mailConfig     mailConfig
-	authConfig     AuthConfig
-	encryptConfig  encryptConfig
-	supabaseConfig supabaseConfig
-	stripe         stripeConfig
+	addr              string
+	env               string
+	apiURL            string
+	clientURL         string
+	db                dbConfig
+	redisCfg          redisConfig
+	mailConfig        mailConfig
+	authConfig        AuthConfig
+	encryptConfig     encryptConfig
+	supabaseConfig    supabaseConfig
+	stripe            stripeConfig
+	googleOauthConfig googleOauthConfig
 }
 
 type AuthConfig struct {
@@ -75,6 +78,11 @@ type encryptConfig struct {
 type mailConfig struct {
 	exp      time.Duration
 	mailTrap mailTrapConfig
+}
+
+type googleOauthConfig struct {
+	clientId     string
+	clientSecret string
 }
 
 type mailTrapConfig struct {
@@ -139,6 +147,9 @@ func (app *application) routes() http.Handler {
 			r.Post("/reset-password/2fa", app.verifyForgetPassword2fa)
 			r.Post("/reset-password/recovery-code", app.verifyForgetPasswordRecoveryCode)
 			r.Post("/reset-password/change", app.resetPassword)
+
+			r.Post("/google", app.signInWithProvider)
+			r.Post("/google/callback", app.googleCallbackHandler)
 
 		})
 
