@@ -100,7 +100,14 @@ func (m *PaymentModel) Create(ctx context.Context, payment *Payment) error {
 			return err
 		}
 
+		if payment.Status == CompletedPaymentStatus {
+			err := clearOrderedCartItems(ctx, tx, payment.OrderID)
+
+			if err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
-
 }

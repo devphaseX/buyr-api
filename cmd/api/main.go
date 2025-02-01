@@ -16,6 +16,7 @@ import (
 	"github.com/devphaseX/buyr-api.git/internal/totp.go"
 	"github.com/devphaseX/buyr-api.git/internal/validator"
 	"github.com/devphaseX/buyr-api.git/worker"
+	"github.com/devphaseX/buyr-api.git/worker/scheduler"
 	"github.com/go-playground/form/v4"
 	"github.com/hibiken/asynq"
 	"github.com/stripe/stripe-go/v81"
@@ -106,6 +107,11 @@ func main() {
 	}
 
 	taskDistributor := worker.NewTaskDistributor(redisOpts)
+	schedulerOpts := &asynq.SchedulerOpts{}
+	taskScheduler := scheduler.NewAsyncTaskScheduler(redisOpts, schedulerOpts)
+
+	taskScheduler.RegisterTasks()
+
 	authToken, err := auth.NewPasetoToken(cfg.authConfig.AccessSecretKey, cfg.authConfig.RefreshSecretKey)
 	totp := totp.New()
 	if err != nil {
@@ -157,6 +163,11 @@ func main() {
 		)
 		app.runTaskProcessor(redisOpts, ctx, store, cacheStore, mailClient)
 	})
+
+	go app.background(func() {
+		taskScheduler.Run()
+	})
+
 	err = app.serve()
 
 	if err != nil {
@@ -171,7 +182,9 @@ func (app *application) runTaskProcessor(
 	cacheStore *cache.Storage,
 	mailClient mailer.Client,
 ) {
-	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, cacheStore, mailClient)
+
+	cronTaskProcessor := scheduler.NewAsyncTaskProcessor(redisOpt, store)
+	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, cronTaskProcessor, store, cacheStore, mailClient)
 
 	app.logger.Info("start task processor")
 

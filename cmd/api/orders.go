@@ -49,13 +49,11 @@ func (app *application) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cartItemIds := make([]string, len(cartItems))
 	cartItemProductIds := make([]string, len(cartItems))
 	productsCount := make(map[string]int)
 	productsPrice := make(map[string]float64)
 
 	for _, item := range cartItems {
-		cartItemIds = append(cartItemIds, item.ID)
 		cartItemProductIds = append(cartItemProductIds, item.ProductID)
 		productsCount[item.ProductID] = item.Quantity
 	}
@@ -85,6 +83,28 @@ func (app *application) createOrder(w http.ResponseWriter, r *http.Request) {
 
 	}
 
+	var promo *store.Promo
+	if form.PromoCode != "" {
+		promo, totalPrice, err = app.store.Promos.ValidatePromoCode(r.Context(), form.PromoCode, user.ID, totalPrice)
+		if err != nil {
+			switch {
+			case errors.Is(err, store.ErrPromoNotFound):
+				app.errorResponse(w, http.StatusNotFound, "promo code not found")
+			case errors.Is(err, store.ErrPromoExpired):
+				app.errorResponse(w, http.StatusBadRequest, "promo code has expired")
+			case errors.Is(err, store.ErrPromoUsageLimitReached):
+				app.errorResponse(w, http.StatusBadRequest, "promo code has reached its usage limit")
+			case errors.Is(err, store.ErrMinPurchaseNotMet):
+				app.errorResponse(w, http.StatusBadRequest, err.Error())
+			case errors.Is(err, store.ErrUserNotAllowed):
+				app.errorResponse(w, http.StatusForbidden, "promo code is not valid for this user")
+			default:
+				app.serverErrorResponse(w, r, err)
+			}
+			return
+		}
+	}
+
 	for _, item := range cartItems {
 		item.Price = productsPrice[item.ProductID]
 	}
@@ -103,6 +123,14 @@ func (app *application) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if promo != nil {
+		err = app.store.Promos.IncrementUsage(r.Context(), promo.ID)
+		if err != nil {
+			app.serverErrorResponse(w, r, fmt.Errorf("failed to increment promo usage: %w", err))
+			return
+		}
+	}
+
 	response := envelope{
 		"message": "order created successfully",
 		"data": map[string]interface{}{
@@ -116,43 +144,6 @@ func (app *application) createOrder(w http.ResponseWriter, r *http.Request) {
 
 	app.successResponse(w, http.StatusCreated, response)
 }
-
-/*
-	// Apply the promo code (if provided) to calculate discounts.
-		if form.PromoCode != "" {
-			promo, err := app.store.Promos.GetPromoByCode(r.Context(), form.PromoCode)
-			if err != nil {
-				if errors.Is(err, store.ErrRecordNotFound) {
-					app.badRequestResponse(w, r, errors.New("invalid promo code"))
-				} else {
-					app.serverErrorResponse(w, r, fmt.Errorf("failed to fetch promo code: %w", err))
-				}
-				return
-			}
-
-			// Validate the promo code.
-			if time.Now().After(promo.ExpiresAt) {
-				app.badRequestResponse(w, r, errors.New("promo code has expired"))
-				return
-			}
-
-			// Apply the discount to the total price.
-			totalPrice -= totalPrice * (promo.DiscountPercent / 100)
-		}
-
-		// Deduct the stock quantity for each product in the cart.
-		for _, item := range cartItems {
-			_, err := tx.ExecContext(r.Context(), `
-				UPDATE products
-				SET stock_quantity = stock_quantity - 1
-				WHERE id = $1 AND stock_quantity > 0
-			`, item.ID)
-			if err != nil {
-				app.serverErrorResponse(w, r, fmt.Errorf("failed to update stock for product %s: %w", item.Name, err))
-				return
-			}
-		}
-*/
 
 type initialPaymentRequest struct {
 	PaymentMethod string `json:"payment_method" validate:"required,oneof=stripe paypal"`
@@ -284,6 +275,15 @@ func (app *application) handleStripeWebhook(w http.ResponseWriter, r *http.Reque
 
 		if PaymentStatus == "paid" {
 			status = store.CompletedPaymentStatus
+		} else {
+			order, err := app.store.Orders.GetOrderByID(r.Context(), orderID)
+
+			if err != nil && order.PromoCode != "" {
+				err = app.store.Promos.ReleaseUsage(r.Context(), order.PromoCode)
+				if err != nil {
+					app.logger.Error("failed to release promo code usage", "error", err)
+				}
+			}
 		}
 
 		err := app.taskDistributor.DistributeTaskProcessOrderPayment(r.Context(), &worker.ProcessPaymentPayload{

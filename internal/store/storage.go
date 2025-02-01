@@ -30,6 +30,7 @@ type Storage struct {
 	Orders     OrderStore
 	OrderItems OrderItemStore
 	Payments   PaymentStore
+	Promos     PromoStore
 }
 
 func NewStorage(db *sql.DB) *Storage {
@@ -46,6 +47,7 @@ func NewStorage(db *sql.DB) *Storage {
 		Orders:     NewOrderModel(db),
 		OrderItems: NewOrderItemModel(db),
 		Payments:   NewPaymentModel(db),
+		Promos:     NewPromoModel(db),
 	}
 }
 
@@ -70,4 +72,8 @@ func buildPlaceholders(n int) string {
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
 	return strings.Join(placeholders, ", ")
+}
+
+func wrapDatabaseError(err error) error {
+	return fmt.Errorf("%w: %v", ErrDatabase, err)
 }

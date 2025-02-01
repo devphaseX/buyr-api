@@ -14,6 +14,10 @@ const (
 	QueueDefault  = "default"
 )
 
+type CronTaskRunner interface {
+	MountTasks(*asynq.ServeMux)
+}
+
 type TaskProcessor interface {
 	Start() error
 	Close()
@@ -26,14 +30,15 @@ type TaskProcessor interface {
 }
 
 type RedisTaskProcessor struct {
-	server     *asynq.Server
-	store      *store.Storage
-	cachestore *cache.Storage
-	logger     asynq.Logger
-	mailClient mailer.Client
+	server         *asynq.Server
+	store          *store.Storage
+	cachestore     *cache.Storage
+	logger         asynq.Logger
+	mailClient     mailer.Client
+	cronTaskRunner CronTaskRunner
 }
 
-func NewRedisTaskProcessor(redisOpt asynq.RedisClientOpt, store *store.Storage, cacheStore *cache.Storage, mailClient mailer.Client) TaskProcessor {
+func NewRedisTaskProcessor(redisOpt asynq.RedisClientOpt, cronTaskRunner CronTaskRunner, store *store.Storage, cacheStore *cache.Storage, mailClient mailer.Client) TaskProcessor {
 	logger := NewLogger()
 	server := asynq.NewServer(redisOpt, asynq.Config{
 		Queues: map[string]int{
@@ -49,15 +54,17 @@ func NewRedisTaskProcessor(redisOpt asynq.RedisClientOpt, store *store.Storage, 
 			)
 
 		}),
-		Logger: logger,
+		Concurrency: 10,
+		Logger:      logger,
 	})
 
 	return &RedisTaskProcessor{
-		server:     server,
-		store:      store,
-		cachestore: cacheStore,
-		mailClient: mailClient,
-		logger:     NewLogger(),
+		server:         server,
+		store:          store,
+		cachestore:     cacheStore,
+		cronTaskRunner: cronTaskRunner,
+		mailClient:     mailClient,
+		logger:         NewLogger(),
 	}
 }
 
@@ -70,6 +77,11 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskSendAdminOnboardEmail, processor.ProcessTaskSendAdminOnboardEmail)
 	mux.HandleFunc(TaskProcessOrderPayment, processor.ProcessTaskConfirmOrderPayment)
 	mux.HandleFunc(TaskSendOrderConfirmationEmail, processor.ProcessSendOrderConfirmationEmailTask)
+
+	if processor.cronTaskRunner != nil {
+		processor.cronTaskRunner.MountTasks(mux)
+	}
+
 	return processor.server.Start(mux)
 }
 

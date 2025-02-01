@@ -35,14 +35,15 @@ type Order struct {
 }
 
 type OrderItem struct {
-	ID        string    `json:"id"`
-	OrderID   string    `json:"order_id"`
-	ProductID string    `json:"product_id"`
-	Quantity  int       `json:"quantity"`
-	Price     float64   `json:"price"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Product   Product   `json:"product"`
+	ID         string    `json:"id"`
+	OrderID    string    `json:"order_id"`
+	ProductID  string    `json:"product_id"`
+	Quantity   int       `json:"quantity"`
+	CartItemID string    `json:"-"`
+	Price      float64   `json:"price"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	Product    Product   `json:"product"`
 }
 
 type OrderStore interface {
@@ -50,6 +51,7 @@ type OrderStore interface {
 	GetUserOrderByID(ctx context.Context, userId, id string) (*Order, error)
 	GetOrderByID(ctx context.Context, id string) (*Order, error)
 	UpdateStatus(ctx context.Context, orderID string, status OrderStatus) error
+	GetAbandonedOrders(ctx context.Context, cutoffTime time.Time) ([]Order, error)
 }
 
 type OrderItemStore interface {
@@ -108,8 +110,8 @@ func (m *OrderModel) Create(ctx context.Context, productStore ProductStore, orde
 
 func createOrderItems(ctx context.Context, tx *sql.Tx, orderID string, cartItems []*CartItem) error {
 
-	query := `INSERT INTO order_items(id, order_id, product_id, quantity, price)
-			VALUES ($1, $2, $3, $4, $5) RETURNING created_at, updated_at`
+	query := `INSERT INTO order_items(id, order_id, product_id,cart_item_id, quantity, price)
+			VALUES ($1, $2, $3, $4, $5, $6) RETURNING created_at, updated_at`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
@@ -126,7 +128,8 @@ func createOrderItems(ctx context.Context, tx *sql.Tx, orderID string, cartItems
 
 			orderItem.ID = db.GenerateULID()
 
-			args := []any{orderItem.ID, orderItem.OrderID, orderItem.ProductID, orderItem.Quantity, orderItem.Price}
+			args := []any{orderItem.ID, orderItem.OrderID, orderItem.ProductID,
+				orderItem.CartItemID, orderItem.Quantity, orderItem.Price}
 
 			err := tx.QueryRowContext(ctx, query, args...).Scan(&orderItem.CreatedAt, &orderItem.UpdatedAt)
 
@@ -136,10 +139,11 @@ func createOrderItems(ctx context.Context, tx *sql.Tx, orderID string, cartItems
 			}
 
 		}(&OrderItem{
-			OrderID:   orderID,
-			ProductID: item.ProductID,
-			Quantity:  item.Quantity,
-			Price:     item.Price,
+			OrderID:    orderID,
+			ProductID:  item.ProductID,
+			Quantity:   item.Quantity,
+			Price:      item.Price,
+			CartItemID: item.ID,
 		})
 	}
 
@@ -350,4 +354,35 @@ func (m *OrderItemModel) GetItemsByOrderID(ctx context.Context, orderID string) 
 	}
 
 	return cartItems, nil
+}
+
+func (s *OrderModel) GetAbandonedOrders(ctx context.Context, cutoffTime time.Time) ([]Order, error) {
+	query := `
+		SELECT id, promo_code
+		FROM orders
+		WHERE status = 'pending' AND created_at < $1
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, query, cutoffTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []Order
+	for rows.Next() {
+		var order Order
+		if err := rows.Scan(&order.ID, &order.PromoCode); err != nil {
+			return nil, err
+		}
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to retrieve abandonedOrder: %w", err)
+	}
+
+	return orders, nil
 }

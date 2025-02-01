@@ -803,3 +803,26 @@ func (m *OrderItemModel) GetItemByOrderID(ctx context.Context, orderID string) (
 
 	return cartItems, nil
 }
+
+func clearOrderedCartItems(ctx context.Context, tx *sql.Tx, orderID string) error {
+	// Define the SQL query to delete cart items associated with a paid order
+	query := `
+		DELETE FROM cart_items
+		WHERE id IN (
+			SELECT oi.cart_item_id
+			FROM order_items oi
+			INNER JOIN orders o ON o.id = oi.order_id
+			WHERE oi.order_id = $1 AND o.paid = true
+		);
+	`
+
+	// Execute the query with the provided context and orderID
+	_, err := tx.ExecContext(ctx, query, orderID)
+	if err != nil {
+		// Log the error and return it
+		return fmt.Errorf("failed to clear ordered cart items: %w", err)
+	}
+
+	// Return nil if the operation is successful
+	return nil
+}
