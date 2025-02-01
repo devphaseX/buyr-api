@@ -77,12 +77,12 @@ type Account struct {
 	UserID            string `json:"user_id"`
 	Type              string `json:"type"`
 	Provider          string `json:"provider"`
-	ProviderAccountID string `json:"provider_account_id"`
-	RefreshToken      string `json:"refresh_token"`
-	AccessToken       string `json:"access_token"`
-	ExpiresAt         int64  `json:"expires_at"`
-	TokenType         string `json:"token_type"`
-	Scope             string `json:"scope"`
+	ProviderAccountID string `json:"-"`
+	RefreshToken      string `json:"-"`
+	AccessToken       string `json:"-"`
+	ExpiresAt         int64  `json:"-"`
+	TokenType         string `json:"-"`
+	Scope             string `json:"-"`
 }
 
 // NormalUser represents a normal user in the system.
@@ -278,6 +278,10 @@ func (p *password) Matches(plaintextPassword string) (bool, error) {
 	return true, nil
 }
 
+func (p *password) Hash() []byte {
+	return p.hash
+}
+
 type UserStorage interface {
 	CreateNormalUser(context.Context, *NormalUser) error
 	CreateVendorUser(ctx context.Context, user *VendorUser) error
@@ -303,6 +307,7 @@ type UserStorage interface {
 	GetNormalUsers(ctx context.Context, filter PaginateQueryFilter) ([]*NormalUser, Metadata, error)
 	GetVendorUsers(ctx context.Context, filter PaginateQueryFilter) ([]*VendorUser, Metadata, error)
 	GetAdminUsers(ctx context.Context, filter PaginateQueryFilter) ([]*AdminUser, Metadata, error)
+	GetUserAccountByUserID(ctx context.Context, userID string) (*Account, error)
 }
 
 // UserModel represents the database model for users.
@@ -318,8 +323,8 @@ func NewUserModel(db *sql.DB) UserStorage {
 // createUser inserts a new user into the database.
 func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	query := `
-		INSERT INTO users(id, email, password_hash, is_active, email_verified_at role, force_password_change)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO users(id, email, avatar_url, password_hash, is_active, email_verified_at role, force_password_change)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -328,7 +333,7 @@ func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	}
 
 	id := db.GenerateULID()
-	args := []any{id, user.Email, user.Password.hash, user.IsActive, user.EmailVerifiedAt, user.Role, user.ForcePasswordChange}
+	args := []any{id, user.Email, user.AvatarURL, user.Password.hash, user.IsActive, user.EmailVerifiedAt, user.Role, user.ForcePasswordChange}
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
@@ -1422,4 +1427,34 @@ func (m *UserModel) EnableUser(ctx context.Context, userID string) error {
 	}
 
 	return nil
+}
+
+func (m *UserModel) GetUserAccountByUserID(ctx context.Context, userID string) (*Account, error) {
+	query := `
+		SELECT user_id, type, provider, provider_account_id,access_token,
+			refresh_token,expires_at,token_type, scope
+		FROM accounts
+		WHERE user_id = $1
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	account := &Account{}
+	err := m.db.QueryRowContext(ctx, query, userID).Scan(&account.UserID, &account.Type,
+		&account.Provider, &account.ProviderAccountID, &account.AccessToken,
+		&account.RefreshToken, &account.ExpiresAt, &account.TokenType, &account.Scope,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+
+		default:
+			return nil, err
+		}
+	}
+
+	return account, nil
 }

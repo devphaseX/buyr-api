@@ -185,14 +185,16 @@ func (app *application) routes() http.Handler {
 		r.Route("/carts", func(r chi.Router) {
 			r.Use(app.requireAuthenicatedUser)
 			r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
+
 				r.Get("/", app.getCurrentUserCart)
 				r.Get("/items", app.getGroupVendorCartItem)
 				r.Get("/items/vendor", app.getVendorCartItem)
+				r.Post("/checkout", app.createOrder)
+				r.Post("/{orderID}/pay", app.initiatePayment)
 
 				r.Post("/items", app.addCardItem)
 				r.Get("/items/{cardItemID}", app.getCartItemByID)
 				r.Delete("/items/{itemID}", app.removeCartItem)
-
 				r.Patch("/items/{itemID}", app.setCartItemQuantity)
 
 			})
@@ -200,10 +202,6 @@ func (app *application) routes() http.Handler {
 
 		r.Route("/orders", func(r chi.Router) {
 			r.Post("/webhook/stripe", app.handleStripeWebhook)
-			r.With(app.requireAuthenicatedUser, app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
-				r.Post("/", app.createOrder)
-				r.Post("/{orderID}/pay", app.initiatePayment)
-			})
 		})
 
 		r.Route("/products", func(r chi.Router) {

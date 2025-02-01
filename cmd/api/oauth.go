@@ -76,6 +76,7 @@ func (app *application) googleCallbackHandler(w http.ResponseWriter, r *http.Req
 					Email:           userData.Email, // Use userData.Email
 					Role:            store.UserRole,
 					EmailVerifiedAt: &emailVerifiedAt,
+					AvatarURL:       userData.Image,
 					IsActive:        true,
 				},
 			}

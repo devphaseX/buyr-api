@@ -19,9 +19,24 @@ func (app *application) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.successResponse(w, http.StatusOK, envelope{
+	account, err := app.store.Users.GetUserAccountByUserID(r.Context(), userProfile.ID)
+
+	if err != nil {
+		if errors.Is(err, store.ErrRecordNotFound) {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	response := envelope{
 		"user": userProfile,
-	})
+	}
+
+	if account != nil {
+		response["account"] = account
+	}
+
+	app.successResponse(w, http.StatusOK, response)
 }
 
 func (app *application) getUser(ctx context.Context, userID string) (*AuthInfo, error) {

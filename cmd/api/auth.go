@@ -265,6 +265,17 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	account, err := app.store.Users.GetUserAccountByUserID(r.Context(), user.ID)
+	if err != nil {
+		if !errors.Is(err, store.ErrRecordNotFound) {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	} else if account != nil && len(user.Password.Hash()) == 0 {
+		app.forbiddenResponse(w, r, fmt.Sprintf("This account was registered via %s. Please log in using %s.", account.Provider, account.Provider))
+		return
+	}
+
 	match, err := user.Password.Matches(form.Password)
 
 	if err != nil {
