@@ -152,6 +152,9 @@ func main() {
 		Endpoint:     google.Endpoint,
 	}
 
+	if err != nil {
+		logger.Panic(err)
+	}
 	app := &application{
 		cfg:             cfg,
 		totp:            totp,

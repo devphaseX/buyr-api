@@ -271,7 +271,7 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 			app.serverErrorResponse(w, r, err)
 			return
 		}
-	} else if account != nil && len(user.Password.Hash()) == 0 {
+	} else if account != nil && user.Password.IsSetPasswordEmpty() {
 		app.forbiddenResponse(w, r, fmt.Sprintf("This account was registered via %s. Please log in using %s.", account.Provider, account.Provider))
 		return
 	}
@@ -395,8 +395,8 @@ func (app *application) verifyLogin2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete the token after successful verification
-	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.TokenScope(user.ID), form.MfaToken); err != nil {
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.Login2faTokenScope, user.ID)
+	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
@@ -477,13 +477,13 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 		app.serverErrorResponse(w, r, err)
 		return
 	}
-	// Delete the specific token after successful verification
-	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.Login2faTokenScope, user.ID); err != nil {
+
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.Login2faTokenScope, user.ID)
+	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Create user session and set cookies
 	app.createUserSessionAndSetCookies(w, r, user.User, signin2faPayload.RememberMe)
 }
 
@@ -493,12 +493,12 @@ type refreshRequest struct {
 
 func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
 	var form refreshRequest
-	// Try to get the refresh token from the cookie
 	refreshTokenCookie, err := r.Cookie("sid")
+
 	if err == nil && refreshTokenCookie != nil && strings.TrimSpace(refreshTokenCookie.Value) != "" {
 		form.RefreshToken = refreshTokenCookie.Value
 	} else {
-		// If the cookie is not available, try to get the refresh token from the JSON body
+
 		if err := app.readJSON(w, r, &form); err != nil {
 			app.badRequestResponse(w, r, errors.New("missing refresh token"))
 			return
@@ -511,21 +511,20 @@ func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the refresh token
 	claims, err := app.authToken.ValidateRefreshToken(form.RefreshToken)
 
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid refresh token")
 		return
 	}
-	// Validate the session
+
 	session, user, canExtend, err := app.store.Sessions.ValidateSession(r.Context(), claims.SessionID, claims.Version)
+
 	if err != nil || session == nil {
 		app.unauthorizedResponse(w, r, "invalid session")
 		return
 	}
 
-	// Generate a new access token
 	accessToken, err := app.authToken.GenerateAccessToken(user.ID, session.ID, app.cfg.authConfig.AccessTokenTTL)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -686,10 +685,8 @@ func (app *application) confirmForgetPasswordToken(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// If 2FA is enabled, return a 2FA token
 	if payload.EnableTwoFactor {
 
-		// Respond with the 2FA token
 		app.successResponse(w, http.StatusOK, envelope{
 			"message":        "Token confirmed successfully. 2FA verification required.",
 			"mfa_enabled":    true,
@@ -698,7 +695,6 @@ func (app *application) confirmForgetPasswordToken(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// If 2FA is not enabled, respond with success
 	app.successResponse(w, http.StatusOK, envelope{
 		"message": "Token confirmed successfully. Please reset your password.",
 	})
@@ -707,7 +703,6 @@ func (app *application) confirmForgetPasswordToken(w http.ResponseWriter, r *htt
 func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.Request) {
 	var form verify2FAForm
 
-	// Parse and validate the request body
 	if err := app.readJSON(w, r, &form); err != nil {
 		app.badRequestResponse(w, r, err)
 		return
@@ -718,20 +713,17 @@ func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Fetch the 2FA token from the cache
 	mfaToken, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPasswordTokenScope, form.MfaToken)
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
 		return
 	}
 
-	// Verify the token scope
 	if mfaToken.Scope != cache.ForgetPasswordTokenScope {
 		app.unauthorizedResponse(w, r, "invalid 2FA token scope")
 		return
 	}
 
-	// Unmarshal the payload
 	var payload forgetPassword2faPayload
 	if err := json.Unmarshal(mfaToken.Data, &payload); err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -749,7 +741,6 @@ func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Fetch the user
 	user, err := app.store.Users.GetByID(r.Context(), mfaToken.UserID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -762,23 +753,19 @@ func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Verify the 2FA code (e.g., using a TOTP library)
 	if !app.totp.VerifyCode(secret, form.MfaCode) {
 		app.unauthorizedResponse(w, r, "invalid 2FA code")
 		return
 	}
 
-	// Update the payload to set EmailVerify to true
 	payload.TwoVerifyConfirmed = true
 
-	// Marshal the updated payload
 	updatedPayload, err := json.Marshal(payload)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Update the token with the new payload
 	mfaToken.Data = updatedPayload
 	err = app.cacheStore.Tokens.Insert(r.Context(), mfaToken)
 	if err != nil {
@@ -786,7 +773,6 @@ func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Respond with success
 	app.successResponse(w, http.StatusOK, envelope{
 		"message": "2FA verification successful. Please reset your password.",
 	})

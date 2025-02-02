@@ -45,7 +45,7 @@ func (m *RedisTokenModel) Insert(ctx context.Context, token *Token) error {
 		return err
 	}
 	// Store the token hash and expiry in Redis
-	err = m.client.Set(ctx, redisKey, byte, time.Until(token.Expiry).Abs()).Err()
+	err = m.client.SetEx(ctx, redisKey, byte, time.Until(token.Expiry).Abs()).Err()
 	if err != nil {
 		return fmt.Errorf("failed to insert token into Redis: %w", err)
 	}

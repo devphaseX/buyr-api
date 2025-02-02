@@ -247,6 +247,13 @@ func (app *application) verifyChangePassword2fa(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ChangePassword2faTokenScope, user.ID)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	response := envelope{
 		"message": "your password has been changed successfully",
 	}

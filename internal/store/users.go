@@ -278,8 +278,8 @@ func (p *password) Matches(plaintextPassword string) (bool, error) {
 	return true, nil
 }
 
-func (p *password) Hash() []byte {
-	return p.hash
+func (p *password) IsSetPasswordEmpty() bool {
+	return len(p.hash) == 0
 }
 
 type UserStorage interface {
