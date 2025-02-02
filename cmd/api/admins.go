@@ -79,7 +79,7 @@ func (app *application) createAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := app.cacheStore.Tokens.New(newAdminUser.UserID, time.Hour*24*7, cache.ScopeActivation, nil)
+	token, err := app.cacheStore.Tokens.New(newAdminUser.UserID, time.Hour*24*7, cache.ActivationTokenScope, nil)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)

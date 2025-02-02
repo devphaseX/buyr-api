@@ -79,7 +79,7 @@ func (app *application) sendAccountActivationEmail(ctx context.Context, user *st
 	activationToken, err := app.cacheStore.Tokens.New(
 		user.ID,
 		time.Hour*24*3,
-		cache.ScopeActivation,
+		cache.ActivationTokenScope,
 		nil,
 	)
 
@@ -142,7 +142,7 @@ func (app *application) sendAccountActivationEmail(ctx context.Context, user *st
 func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 	tokenKey := r.URL.Query().Get("token")
 
-	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ScopeActivation, tokenKey)
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ActivationTokenScope, tokenKey)
 
 	if err != nil {
 		switch {
@@ -183,7 +183,7 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ScopeActivation, user.ID)
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ActivationTokenScope, user.ID)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -200,7 +200,7 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		fogetPasswordToken, err := app.cacheStore.Tokens.New(user.ID, time.Hour*4, cache.ForgetPassword, payload)
+		fogetPasswordToken, err := app.cacheStore.Tokens.New(user.ID, time.Hour*4, cache.ForgetPasswordTokenScope, payload)
 
 		if err != nil {
 			app.serverErrorResponse(w, r, err)
@@ -310,7 +310,7 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		token, err := app.cacheStore.Tokens.New(
 			user.ID,
 			time.Hour*4,
-			cache.Login2fa,
+			cache.Login2faTokenScope,
 			payload,
 		)
 
@@ -358,14 +358,14 @@ func (app *application) verifyLogin2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch the token from the cache
-	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Login2fa, form.MfaToken)
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Login2faTokenScope, form.MfaToken)
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
 		return
 	}
 
 	// Verify the token scope
-	if token.Scope != cache.Login2fa {
+	if token.Scope != cache.Login2faTokenScope {
 		app.unauthorizedResponse(w, r, "invalid 2FA token")
 		return
 	}
@@ -396,7 +396,7 @@ func (app *application) verifyLogin2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete the token after successful verification
-	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), user.ID, form.MfaToken); err != nil {
+	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.TokenScope(user.ID), form.MfaToken); err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
@@ -427,14 +427,14 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 	}
 
 	// Fetch the token from the cache
-	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Login2fa, form.MfaToken)
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Login2faTokenScope, form.MfaToken)
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
 		return
 	}
 
 	// Verify the token scope
-	if token.Scope != cache.Login2fa {
+	if token.Scope != cache.Login2faTokenScope {
 		app.unauthorizedResponse(w, r, "invalid 2FA token")
 		return
 	}
@@ -478,7 +478,7 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 		return
 	}
 	// Delete the specific token after successful verification
-	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.Login2fa, user.ID); err != nil {
+	if err := app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.Login2faTokenScope, user.ID); err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
@@ -599,7 +599,7 @@ func (app *application) forgetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := app.cacheStore.Tokens.New(user.ID, time.Hour*4, cache.ForgetPassword, payload)
+	token, err := app.cacheStore.Tokens.New(user.ID, time.Hour*4, cache.ForgetPasswordTokenScope, payload)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -648,14 +648,14 @@ func (app *application) confirmForgetPasswordToken(w http.ResponseWriter, r *htt
 	}
 
 	// Fetch the token from the cache
-	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPassword, form.Token)
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPasswordTokenScope, form.Token)
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired token")
 		return
 	}
 
 	// Verify the token scope
-	if token.Scope != cache.ForgetPassword {
+	if token.Scope != cache.ForgetPasswordTokenScope {
 		app.unauthorizedResponse(w, r, "invalid token scope")
 		return
 	}
@@ -719,14 +719,14 @@ func (app *application) verifyForgetPassword2fa(w http.ResponseWriter, r *http.R
 	}
 
 	// Fetch the 2FA token from the cache
-	mfaToken, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPassword, form.MfaToken)
+	mfaToken, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPasswordTokenScope, form.MfaToken)
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
 		return
 	}
 
 	// Verify the token scope
-	if mfaToken.Scope != cache.ForgetPassword {
+	if mfaToken.Scope != cache.ForgetPasswordTokenScope {
 		app.unauthorizedResponse(w, r, "invalid 2FA token scope")
 		return
 	}
@@ -812,14 +812,14 @@ func (app *application) verifyForgetPasswordRecoveryCode(w http.ResponseWriter, 
 	}
 
 	// Fetch the 2FA token from the cache
-	mfaToken, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPassword, form.MfaToken)
+	mfaToken, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPasswordTokenScope, form.MfaToken)
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
 		return
 	}
 
 	// Verify the token scope
-	if mfaToken.Scope != cache.ForgetPassword {
+	if mfaToken.Scope != cache.ForgetPasswordTokenScope {
 		app.unauthorizedResponse(w, r, "invalid 2FA token scope")
 		return
 	}
@@ -920,7 +920,7 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch the token from the cache
-	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPassword, form.Token)
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPasswordTokenScope, form.Token)
 
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired token")
@@ -928,7 +928,7 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify the token scope
-	if token.Scope != cache.ForgetPassword {
+	if token.Scope != cache.ForgetPasswordTokenScope {
 		app.unauthorizedResponse(w, r, "invalid token scope")
 		return
 	}
@@ -968,7 +968,7 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete the token after successful password reset
-	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ForgetPassword, user.ID)
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ForgetPasswordTokenScope, user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

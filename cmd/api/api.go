@@ -160,7 +160,8 @@ func (app *application) routes() http.Handler {
 				r.Use(app.requireAuthenicatedUser)
 				r.Get("/", app.getNormalUsers)
 				r.Get("/current", app.getCurrentUser)
-
+				r.Post("/change-password", app.changePassword)
+				r.Post("/change-password/2fa", app.verifyChangePassword2fa)
 			})
 
 		})
@@ -189,7 +190,7 @@ func (app *application) routes() http.Handler {
 				r.Get("/", app.getCurrentUserCart)
 				r.Get("/items", app.getGroupVendorCartItem)
 				r.Get("/items/vendor", app.getVendorCartItem)
-				r.Post("/checkout", app.createOrder)
+				r.Post("/checkout", app.handleCheckout)
 				r.Post("/{orderID}/pay", app.initiatePayment)
 
 				r.Post("/items", app.addCardItem)

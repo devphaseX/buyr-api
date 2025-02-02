@@ -20,15 +20,15 @@ func NewRedisTokenModel(client *redis.Client) *RedisTokenModel {
 	return &RedisTokenModel{client: client}
 }
 
-func createTokenKey(scope, identifier string) string {
+func createTokenKey(scope TokenScope, identifier string) string {
 	return fmt.Sprintf("%s:%s", scope, identifier)
 }
 
-func createUserTokenSetKey(scope, userID string) string {
+func createUserTokenSetKey(scope TokenScope, userID string) string {
 	return fmt.Sprintf("%s:user_tokens:%s", scope, userID)
 }
 
-func (m *RedisTokenModel) New(userID string, ttl time.Duration, scope string, data []byte) (*Token, error) {
+func (m *RedisTokenModel) New(userID string, ttl time.Duration, scope TokenScope, data []byte) (*Token, error) {
 	token, err := generateToken(userID, ttl, scope, data)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (m *RedisTokenModel) Insert(ctx context.Context, token *Token) error {
 	return nil
 }
 
-func (s *RedisTokenModel) Get(ctx context.Context, scope, tokenKey string) (*Token, error) {
+func (s *RedisTokenModel) Get(ctx context.Context, scope TokenScope, tokenKey string) (*Token, error) {
 	// Hash the tokenKey
 	hash := sha256.Sum256([]byte(tokenKey))
 	hashedKey := hex.EncodeToString(hash[:]) //
@@ -89,7 +89,7 @@ func (s *RedisTokenModel) Get(ctx context.Context, scope, tokenKey string) (*Tok
 	return token, nil
 }
 
-func (m *RedisTokenModel) DeleteAllForUser(ctx context.Context, scope string, userID string) error {
+func (m *RedisTokenModel) DeleteAllForUser(ctx context.Context, scope TokenScope, userID string) error {
 	// Create the key for the user's token set
 	userTokenSetKey := createUserTokenSetKey(scope, userID)
 

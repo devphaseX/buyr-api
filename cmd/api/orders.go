@@ -19,7 +19,7 @@ type createOrderRequest struct {
 	PromoCode string   `json:"promo_code"`
 }
 
-func (app *application) createOrder(w http.ResponseWriter, r *http.Request) {
+func (app *application) handleCheckout(w http.ResponseWriter, r *http.Request) {
 	var (
 		form createOrderRequest
 		user = getUserFromCtx(r)
@@ -49,9 +49,11 @@ func (app *application) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cartItemProductIds := make([]string, len(cartItems))
-	productsCount := make(map[string]int)
-	productsPrice := make(map[string]float64)
+	var (
+		productsCount      = make(map[string]int)
+		productsPrice      = make(map[string]float64)
+		cartItemProductIds = make([]string, len(cartItems))
+	)
 
 	for _, item := range cartItems {
 		cartItemProductIds = append(cartItemProductIds, item.ProductID)

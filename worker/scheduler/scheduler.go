@@ -39,3 +39,7 @@ func (c *AsyncTaskScheduler) Run() {
 func (s *AsyncTaskScheduler) RegisterTasks() {
 	s.reclaimAbandonedPromos()
 }
+
+func (c *AsyncTaskScheduler) Close() {
+	c.scheduler.Shutdown()
+}

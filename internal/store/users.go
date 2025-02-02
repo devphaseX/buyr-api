@@ -308,6 +308,7 @@ type UserStorage interface {
 	GetVendorUsers(ctx context.Context, filter PaginateQueryFilter) ([]*VendorUser, Metadata, error)
 	GetAdminUsers(ctx context.Context, filter PaginateQueryFilter) ([]*AdminUser, Metadata, error)
 	GetUserAccountByUserID(ctx context.Context, userID string) (*Account, error)
+	ChangePassword(ctx context.Context, user *User) error
 }
 
 // UserModel represents the database model for users.
@@ -1457,4 +1458,19 @@ func (m *UserModel) GetUserAccountByUserID(ctx context.Context, userID string) (
 	}
 
 	return account, nil
+}
+
+func (m *UserModel) ChangePassword(ctx context.Context, user *User) error {
+	query := `UPDATE users SET password_hash = $1 WHERE id = $2`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	_, err := m.db.ExecContext(ctx, query, user.ID, user.Password.hash)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

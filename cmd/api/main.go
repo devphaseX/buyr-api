@@ -182,6 +182,11 @@ func main() {
 	})
 
 	go app.background(func() {
+		go func() {
+			<-ctx.Done()
+			taskScheduler.Close()
+		}()
+
 		taskScheduler.Run()
 	})
 

@@ -7,34 +7,51 @@ import (
 	"github.com/devphaseX/buyr-api.git/internal/validator"
 )
 
+type ResponseErrorCode string
+
+const (
+	ErrorCodeBadRequest          ResponseErrorCode = "bad_request"
+	ErrorCodeRequired2FA         ResponseErrorCode = "required_2fa_code"
+	ErrorCodeUnauthorized        ResponseErrorCode = "unauthorized"
+	ErrorCodeForbidden           ResponseErrorCode = "forbidden"
+	ErrorCodeNotFound            ResponseErrorCode = "not_found"
+	ErrorCodeConflict            ResponseErrorCode = "conflict"
+	ErrorCodeInvalidCredentials  ResponseErrorCode = "invalid_credentials"
+	ErrorCodeInternalServerError ResponseErrorCode = "internal_server_error"
+)
+
 func (app *application) badRequestResponse(w http.ResponseWriter, r *http.Request, err error) {
 	app.logger.Warnf("bad request error", "method", r.Method, "path", r.URL.Path, "error", err)
 
 	var validationErrors *validator.ValidationErrors
 
 	if errors.As(err, &validationErrors) {
-		app.errorResponse(w, http.StatusBadRequest, validationErrors.FieldErrors())
+		app.errorResponse(w, http.StatusBadRequest, validationErrors.FieldErrors(), envelope{"code": ErrorCodeBadRequest})
 		return
 	}
-	app.errorResponse(w, http.StatusBadRequest, err.Error())
+	app.errorResponse(w, http.StatusBadRequest, err.Error(), envelope{"code": ErrorCodeBadRequest})
+}
+
+func (app *application) required2faCodeResponse(w http.ResponseWriter, r *http.Request, token string) {
+	app.logger.Warnf("required 2fa error", "method", r.Method, "path", r.URL.Path, "error")
+
+	app.errorResponse(w, http.StatusForbidden, "2FA code is required", envelope{
+		"code":  ErrorCodeRequired2FA,
+		"token": token,
+	})
 }
 
 func (app *application) unauthorizedResponse(w http.ResponseWriter, r *http.Request, message string) {
-	// Log the unauthorized access attempt
 	app.logger.Warnf(
 		"unauthorized access",
 		"method", r.Method,
 		"path", r.URL.Path,
 	)
 
-	// Return a 401 Unauthorized or 403 Forbidden response
-	status := http.StatusUnauthorized
-	// Send the error response
-	app.errorResponse(w, status, message)
+	app.errorResponse(w, http.StatusUnauthorized, message, envelope{"code": ErrorCodeUnauthorized})
 }
 
 func (app *application) conflictResponse(w http.ResponseWriter, r *http.Request, message string) {
-	// Log the conflict error
 	app.logger.Warnf(
 		"conflict error",
 		"method", r.Method,
@@ -42,92 +59,82 @@ func (app *application) conflictResponse(w http.ResponseWriter, r *http.Request,
 		"error", message,
 	)
 
-	// Return a 409 Conflict response
-	status := http.StatusConflict
-
-	// Send the error response
-	app.errorResponse(w, status, message)
+	app.errorResponse(w, http.StatusConflict, message, envelope{"code": ErrorCodeConflict})
 }
 
 func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
-	app.logger.Errorw("interal server error", "method", r.Method, "path", r.URL.Path, "error", err)
+	app.logger.Errorw("internal server error", "method", r.Method, "path", r.URL.Path, "error", err)
 
 	message := "the server encountered a problem and could not process your request"
-	app.errorResponse(w, http.StatusInternalServerError, message)
+	app.errorResponse(w, http.StatusInternalServerError, message, envelope{"code": ErrorCodeInternalServerError})
 }
 
 func (app *application) forbiddenResponse(w http.ResponseWriter, r *http.Request, details ...string) {
-	// Log the forbidden error
 	app.logger.Errorw("forbidden access attempt",
 		"method", r.Method,
 		"path", r.URL.Path,
 	)
 
-	// Determine the message to use
 	message := "you do not have permission to access this resource"
 	if len(details) > 0 && details[0] != "" {
 		message = details[0]
 	}
 
-	// Send the forbidden response
-	app.errorResponse(w, http.StatusForbidden, message)
+	app.errorResponse(w, http.StatusForbidden, message, envelope{"code": ErrorCodeForbidden})
 }
 
 func (app *application) notFoundResponse(w http.ResponseWriter, r *http.Request, details ...string) {
-	// Log the forbidden error
 	app.logger.Errorw("not found attempt",
 		"method", r.Method,
 		"path", r.URL.Path,
 	)
 
-	// Determine the message to use
 	message := "the requested resource could not be found"
 	if len(details) > 0 && details[0] != "" {
 		message = details[0]
 	}
 
-	// Send the forbidden response
-	app.errorResponse(w, http.StatusNotFound, message)
+	app.errorResponse(w, http.StatusNotFound, message, envelope{"code": ErrorCodeNotFound})
 }
 
 func (app *application) invalidCredentialsResponse(w http.ResponseWriter, r *http.Request) {
-	// Log the failed sign-in attempt
 	app.logger.Infow("failed sign-in attempt", "method", r.Method, "path", r.URL.Path)
 
-	// Define the error message
 	message := "invalid credentials: incorrect email or password"
-
-	// Send the error response
-	app.errorResponse(w, http.StatusUnauthorized, message)
+	app.errorResponse(w, http.StatusUnauthorized, message, envelope{"code": ErrorCodeInvalidCredentials})
 }
 
-func (app *application) errorResponse(w http.ResponseWriter, status int, message any) {
-	// Create a structured response envelope
-	env := envelope{
-		"status": "error", // Indicates that the request failed
-		"error":  message, // Provides the error message or details
+func (app *application) errorResponse(w http.ResponseWriter, status int, message any, info ...envelope) {
+	error := envelope{
+		"message": message,
 	}
 
-	// Write the JSON response
+	env := envelope{
+		"status": "error",
+		"error":  error,
+	}
+
+	if len(info) == 1 && len(info[0]) > 0 {
+		for key, value := range info[0] {
+			error[key] = value
+		}
+	}
+
 	err := app.writeJSON(w, status, env, nil)
 	if err != nil {
-		// If there's an error writing the JSON, log it and return a 500 Internal Server Error
 		app.logger.Info("Failed to write JSON response:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
 func (app *application) successResponse(w http.ResponseWriter, status int, data any) {
-	// Create a structured response envelope
 	env := envelope{
-		"status": "success", // Indicates that the request was successful
-		"data":   data,      // Contains the success payload
+		"status": "success",
+		"data":   data,
 	}
 
-	// Write the JSON response
 	err := app.writeJSON(w, status, env, nil)
 	if err != nil {
-		// If there's an error writing the JSON, log it and return a 500 Internal Server Error
 		app.logger.Info("Failed to write JSON response:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}

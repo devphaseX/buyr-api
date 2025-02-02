@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -67,8 +66,12 @@ func (app *application) googleCallbackHandler(w http.ResponseWriter, r *http.Req
 	user, err := app.store.Users.GetByEmail(r.Context(), userData.Email)
 	if err != nil {
 		if errors.Is(err, store.ErrRecordNotFound) {
-			names := strings.Fields(userData.Name)
-			emailVerifiedAt := time.Now()
+
+			var (
+				names           = strings.Fields(userData.Name)
+				emailVerifiedAt = time.Now()
+			)
+
 			normalUser := &store.NormalUser{
 				FirstName: names[0],
 				LastName:  names[1],
@@ -98,7 +101,7 @@ func (app *application) googleCallbackHandler(w http.ResponseWriter, r *http.Req
 		UserID:            user.ID,
 		Provider:          "google",
 		ProviderAccountID: userData.ID,
-		Type:              "oauth", // Set to "oauth"
+		Type:              "oauth",
 		AccessToken:       token.AccessToken,
 		RefreshToken:      token.RefreshToken,
 		TokenType:         token.TokenType,
@@ -124,25 +127,16 @@ type UserData struct {
 }
 
 func (app *application) fetchUserData(ctx context.Context, token *oauth2.Token) (*UserData, error) {
-	// Create an HTTP client with the OAuth token
 	client := app.googleOauth.Client(ctx, token)
 
-	// Fetch user data from the provider's userinfo endpoint
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch user data: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
-	}
-
-	// Parse the JSON response into a UserData struct
 	var userData UserData
-	if err := json.Unmarshal(body, &userData); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&userData); err != nil {
 		return nil, fmt.Errorf("failed to parse user data: %v", err)
 	}
 

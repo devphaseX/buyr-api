@@ -11,10 +11,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+type TokenScope string
+
 const (
-	ScopeActivation = "activation"
-	ForgetPassword  = "forget_password"
-	Login2fa        = "login_2fa"
+	ActivationTokenScope        TokenScope = "activation"
+	ForgetPasswordTokenScope    TokenScope = "forget_password"
+	Login2faTokenScope          TokenScope = "login_2fa"
+	ChangePassword2faTokenScope TokenScope = "change_password_2fa"
 )
 
 var (
@@ -22,19 +25,19 @@ var (
 )
 
 type Token struct {
-	Plaintext string    `json:"-"`
-	Hash      []byte    `json:"hash"`
-	UserID    string    `json:"user_id"`
-	Expiry    time.Time `json:"expiry"`
-	Scope     string    `json:"scope"`
-	Data      []byte    `json:"data"`
+	Plaintext string     `json:"-"`
+	Hash      []byte     `json:"hash"`
+	UserID    string     `json:"user_id"`
+	Expiry    time.Time  `json:"expiry"`
+	Scope     TokenScope `json:"scope"`
+	Data      []byte     `json:"data"`
 }
 
 type TokenStore interface {
-	New(userID string, ttl time.Duration, scope string, data []byte) (*Token, error)
+	New(userID string, ttl time.Duration, scope TokenScope, data []byte) (*Token, error)
 	Insert(ctx context.Context, token *Token) error
-	Get(ctx context.Context, scope, tokenKey string) (*Token, error)
-	DeleteAllForUser(ctx context.Context, scope string, userID string) error
+	Get(ctx context.Context, scope TokenScope, tokenKey string) (*Token, error)
+	DeleteAllForUser(ctx context.Context, scope TokenScope, userID string) error
 }
 
 type UserStore interface {
@@ -54,7 +57,7 @@ func NewRedisStorage(rdb *redis.Client) *Storage {
 	}
 }
 
-func generateToken(userID string, ttl time.Duration, scope string, data []byte) (*Token, error) {
+func generateToken(userID string, ttl time.Duration, scope TokenScope, data []byte) (*Token, error) {
 	token := &Token{
 		UserID: userID,
 		Expiry: time.Now().Add(ttl),
