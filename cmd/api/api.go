@@ -203,6 +203,14 @@ func (app *application) routes() http.Handler {
 
 		r.Route("/orders", func(r chi.Router) {
 			r.Post("/webhook/stripe", app.handleStripeWebhook)
+			r.Get("/", app.getUserViewOrderLists)
+		})
+
+		r.Route("/addresses", func(r chi.Router) {
+			r.Get("/", app.getUserAddresses)
+			r.Post("/", app.createUserAddress)
+			r.Get("/{addressID}", app.getUserAddressByID)
+			r.Get("/default", app.setDefaultAddress)
 		})
 
 		r.Route("/products", func(r chi.Router) {

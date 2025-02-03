@@ -15,8 +15,9 @@ import (
 )
 
 type createOrderRequest struct {
-	CartItems []string `json:"cart_items" validate:"required"`
-	PromoCode string   `json:"promo_code"`
+	CartItems         []string `json:"cart_items" validate:"required"`
+	PromoCode         string   `json:"promo_code"`
+	ShippingAddressID string   `json:"shipping_address_id" validate:"required"`
 }
 
 func (app *application) handleCheckout(w http.ResponseWriter, r *http.Request) {
@@ -72,11 +73,33 @@ func (app *application) handleCheckout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	address, err := app.store.Address.GetByID(r.Context(), form.ShippingAddressID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "shipping address not found")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	if address.UserID != user.ID {
+		app.notFoundResponse(w, r, "shipping address not found")
+		return
+	}
+
+	if address.AddressType == store.ShippingAddressType {
+		app.forbiddenResponse(w, r, "invalid address type for shipping")
+		return
+	}
+
 	var totalPrice float64
 	// Check if all products are in stock and have sufficient quantity.
 	for _, item := range products {
 		if item.StockQuantity <= productsCount[item.ID] {
-			app.badRequestResponse(w, r, fmt.Errorf("product %s is out of stock", item.Name))
+			app.badRequestResponse(w, r, fmt.Errorf("insufficient stock for product '%s'. Available quantity: %d", item.Name, item.StockQuantity))
 			return
 		}
 
@@ -297,4 +320,23 @@ func (app *application) handleStripeWebhook(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (app *application) getUserViewOrderLists(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromCtx(r)
+
+	fq := store.PaginateQueryFilter{
+		Page:         1,
+		PageSize:     20,
+		Sort:         "created_at",
+		SortSafelist: []string{"created_at", "-created_at"},
+	}
+
+	if err := fq.Parse(r); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	app.successResponse(w, http.StatusOK, user)
+
 }

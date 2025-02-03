@@ -19,7 +19,10 @@ import (
 	"github.com/devphaseX/buyr-api.git/worker/scheduler"
 	"github.com/go-playground/form/v4"
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 	"github.com/stripe/stripe-go/v81"
+	"github.com/ulule/limiter/v3"
+	lredis "github.com/ulule/limiter/v3/drivers/store/redis"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -155,6 +158,16 @@ func main() {
 	if err != nil {
 		logger.Panic(err)
 	}
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: cfg.redisCfg.addr,
+		DB:   cfg.redisCfg.db,
+	})
+
+	_, err = lredis.NewStoreWithOptions(redisClient, limiter.StoreOptions{
+		Prefix: "buyr_rate_limiter",
+	})
+
 	app := &application{
 		cfg:             cfg,
 		totp:            totp,

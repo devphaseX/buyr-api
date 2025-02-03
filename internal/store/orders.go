@@ -22,16 +22,17 @@ var (
 )
 
 type Order struct {
-	ID            string      `json:"id"`
-	UserID        string      `json:"user_id"`
-	TotalAmount   float64     `json:"total_amount"`
-	PromoCode     string      `json:"promo_code"`
-	Discount      float64     `json:"discount"`
-	Status        OrderStatus `json:"status"`
-	Paid          bool        `json:"paid"`
-	PaymentMethod string      `json:"payment_method"`
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
+	ID                string      `json:"id"`
+	UserID            string      `json:"user_id"`
+	TotalAmount       float64     `json:"total_amount"`
+	PromoCode         string      `json:"promo_code"`
+	Discount          float64     `json:"discount"`
+	Status            OrderStatus `json:"status"`
+	Paid              bool        `json:"paid"`
+	ShippingAddressId string      `json:"shipping_address_id"`
+	PaymentMethod     string      `json:"payment_method"`
+	CreatedAt         time.Time   `json:"created_at"`
+	UpdatedAt         time.Time   `json:"updated_at"`
 }
 
 type OrderItem struct {
