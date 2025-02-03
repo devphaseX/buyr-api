@@ -18,6 +18,8 @@ const (
 	ForgetPasswordTokenScope    TokenScope = "forget_password"
 	Login2faTokenScope          TokenScope = "login_2fa"
 	ChangePassword2faTokenScope TokenScope = "change_password_2fa"
+	ChangeEmail2faTokenScope    TokenScope = "change_email_2fa"
+	ChangeEmailTokenScope       TokenScope = "change_email"
 )
 
 var (

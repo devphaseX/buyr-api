@@ -309,6 +309,7 @@ type UserStorage interface {
 	GetAdminUsers(ctx context.Context, filter PaginateQueryFilter) ([]*AdminUser, Metadata, error)
 	GetUserAccountByUserID(ctx context.Context, userID string) (*Account, error)
 	ChangePassword(ctx context.Context, user *User) error
+	UpdateEmail(ctx context.Context, userID string, newEmail string) error
 }
 
 // UserModel represents the database model for users.
@@ -1470,6 +1471,32 @@ func (m *UserModel) ChangePassword(ctx context.Context, user *User) error {
 
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (m *UserModel) UpdateEmail(ctx context.Context, userID string, newEmail string) error {
+	query := `UPDATE users SET email = $1 WHERE id = $2`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+
+	result, err := m.db.ExecContext(ctx, query, newEmail, userID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
 	}
 
 	return nil

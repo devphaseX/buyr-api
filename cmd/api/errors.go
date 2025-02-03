@@ -12,6 +12,7 @@ type ResponseErrorCode string
 const (
 	ErrorCodeBadRequest          ResponseErrorCode = "bad_request"
 	ErrorCodeRequired2FA         ResponseErrorCode = "required_2fa_code"
+	ErrorInvalid2FACode          ResponseErrorCode = "invalid_2fa_code"
 	ErrorCodeUnauthorized        ResponseErrorCode = "unauthorized"
 	ErrorCodeForbidden           ResponseErrorCode = "forbidden"
 	ErrorCodeNotFound            ResponseErrorCode = "not_found"
@@ -60,6 +61,16 @@ func (app *application) conflictResponse(w http.ResponseWriter, r *http.Request,
 	)
 
 	app.errorResponse(w, http.StatusConflict, message, envelope{"code": ErrorCodeConflict})
+}
+
+func (app *application) invalid2faCodeResponse(w http.ResponseWriter, r *http.Request) {
+	app.logger.Warnf(
+		"invalid 2fa code response",
+		"method", r.Method,
+		"path", r.URL.Path,
+	)
+
+	app.errorResponse(w, http.StatusConflict, "invalid 2fa code", envelope{"code": ErrorInvalid2FACode})
 }
 
 func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {

@@ -260,3 +260,197 @@ func (app *application) verifyChangePassword2fa(w http.ResponseWriter, r *http.R
 
 	app.successResponse(w, http.StatusOK, response)
 }
+
+type initiateEmailChangeRequest struct {
+	NewEmail string `json:"new_email"`
+	Password string `json:"password"`
+}
+
+type initialEmailChangePayload struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+func (app *application) initiateEmailChange(w http.ResponseWriter, r *http.Request) {
+	var (
+		form initiateEmailChangeRequest
+		user = getUserFromCtx(r)
+	)
+
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if match := app.withPasswordAccess(r, form.Password); !match {
+		app.forbiddenResponse(w, r, "the provided old password is incorrect")
+		return
+	}
+
+	if user.TwoFactorAuthEnabled {
+		payload, _ := json.Marshal(initialEmailChangePayload{Email: form.NewEmail})
+
+		token, err := app.cacheStore.Tokens.New(user.ID, time.Minute*30, cache.ChangeEmail2faTokenScope, payload)
+
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		err = app.cacheStore.Tokens.Insert(r.Context(), token)
+
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		app.required2faCodeResponse(w, r, token.Plaintext)
+		return
+	}
+
+	app.sendEmailChangeToken(w, r, user, initialEmailChangePayload{Email: form.NewEmail})
+}
+
+func (app *application) sendEmailChangeToken(w http.ResponseWriter, r *http.Request, user *AuthInfo, payload initialEmailChangePayload) {
+	payloadByte, _ := json.Marshal(payload)
+	token, err := app.cacheStore.Tokens.New(user.User.ID, time.Minute*10, cache.ChangeEmailTokenScope, payloadByte)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.cacheStore.Tokens.Insert(r.Context(), token)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	response := envelope{
+		"message": "Email change initiated. Check your email for confirmation.",
+	}
+
+	app.successResponse(w, http.StatusOK, response)
+}
+
+type verifyEmailChange2faRequest struct {
+	MfaToken string `json:"mfa_token" validate:"required"`
+	Code     string `json:"code" validate:"min=6,max=6"`
+}
+
+func (app *application) verifyEmailChange2fa(w http.ResponseWriter, r *http.Request) {
+	var (
+		form verifyEmailChange2faRequest
+		user = getUserFromCtx(r)
+	)
+
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ChangeEmail2faTokenScope, form.MfaToken)
+
+	if err != nil {
+		switch {
+
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "invalid or expired token")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+
+		return
+	}
+
+	var payload initialEmailChangePayload
+
+	err = json.Unmarshal(token.Data, &payload)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	verified, err := app.verifyTOTP(user.User, form.Code)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	if !verified {
+		app.invalid2faCodeResponse(w, r)
+		return
+	}
+
+	app.sendEmailChangeToken(w, r, user, payload)
+}
+
+type verifyEmailChangeRequest struct {
+	Token string `json:"token"`
+}
+
+func (app *application) verifyEmailChange(w http.ResponseWriter, r *http.Request) {
+	var (
+		form verifyEmailChangeRequest
+		user = getUserFromCtx(r)
+	)
+
+	if err := app.readJSON(w, r, &form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := validate.Struct(form); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ChangeEmailTokenScope, form.Token)
+
+	if err != nil {
+		switch {
+
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "invalid or expired token")
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+
+		return
+	}
+
+	var payload initialEmailChangePayload
+
+	err = json.Unmarshal(token.Data, &payload)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.store.Users.UpdateEmail(r.Context(), user.User.ID, payload.Email)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	response := envelope{
+		"message": "email successfully changed",
+	}
+
+	app.successResponse(w, http.StatusOK, response)
+
+}

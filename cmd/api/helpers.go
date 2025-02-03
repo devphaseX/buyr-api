@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devphaseX/buyr-api.git/internal/encrypt"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/form/v4"
@@ -171,4 +172,14 @@ func isImage(fileHeader *multipart.FileHeader) bool {
 
 	// Check if the MIME type starts with "image/"
 	return strings.HasPrefix(mimeType, "image/")
+}
+
+func (app *application) verifyTOTP(user *store.User, code string) (bool, error) {
+	secret, err := encrypt.DecryptSecret(user.AuthSecret, app.cfg.encryptConfig.masterSecretKey)
+
+	if err != nil {
+		return false, err
+	}
+
+	return !app.totp.VerifyCode(secret, code), nil
 }

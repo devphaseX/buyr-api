@@ -77,7 +77,7 @@ func NewOrderItemModel(db *sql.DB) OrderItemStore {
 
 func createOrder(ctx context.Context, tx *sql.Tx, order *Order) error {
 	order.ID = db.GenerateULID()
-	query := `INSERT INTO orders(id, user_id, total_amount, promo_code, status, paid, payment_method)
+	query := `INSERT INTO orders(id, user_id, total_amount, promo_code, shipping_address_id, status, paid, payment_method)
 			 VALUES($1, $2, $3, $4, $5, $6, $7) RETURNING created_at, updated_at
 	`
 
@@ -85,7 +85,7 @@ func createOrder(ctx context.Context, tx *sql.Tx, order *Order) error {
 
 	defer cancel()
 
-	args := []any{order.ID, order.UserID, order.TotalAmount, order.PromoCode, order.Status, order.Paid, order.PaymentMethod}
+	args := []any{order.ID, order.UserID, order.TotalAmount, order.PromoCode, order.ShippingAddressId, order.Status, order.Paid, order.PaymentMethod}
 	err := tx.QueryRowContext(ctx, query, args...).Scan(&order.CreatedAt, &order.UpdatedAt)
 
 	if err != nil {

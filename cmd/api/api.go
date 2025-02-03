@@ -161,7 +161,12 @@ func (app *application) routes() http.Handler {
 				r.Get("/", app.getNormalUsers)
 				r.Get("/current", app.getCurrentUser)
 				r.Post("/change-password", app.changePassword)
-				r.Post("/change-password/2fa", app.verifyChangePassword2fa)
+				r.Patch("/change-password/2fa", app.verifyChangePassword2fa)
+
+				r.Post("/email/initiate", app.initiateEmailChange)
+				r.Post("/email/verify-2fa", app.verifyEmailChange2fa)
+				r.Patch("/email/verify-email", app.verifyEmailChange)
+
 			})
 
 		})
