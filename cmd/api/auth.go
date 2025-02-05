@@ -899,7 +899,6 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch the token from the cache
 	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.ForgetPasswordTokenScope, form.Token)
 
 	if err != nil {
@@ -907,54 +906,48 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify the token scope
 	if token.Scope != cache.ForgetPasswordTokenScope {
 		app.unauthorizedResponse(w, r, "invalid token scope")
 		return
 	}
 
-	// Unmarshal the payload
 	var payload forgetPassword2faPayload
 	if err := json.Unmarshal(token.Data, &payload); err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Verify that the email has been confirmed
 	if !payload.EmailVerify {
 		app.unauthorizedResponse(w, r, "email not verified")
 		return
 	}
 
 	if payload.EnableTwoFactor && !payload.TwoVerifyConfirmed {
-		// Verify that the two factor has been confirmed for two factor enabled account
 		app.unauthorizedResponse(w, r, "two factor not verified")
 		return
 	}
 
-	// Fetch the user by email
 	user, err := app.store.Users.GetByEmail(r.Context(), payload.Email)
-	_ = user
+
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// // Update the user's password
 	err = app.store.Users.UpdatePassword(r.Context(), user, form.Password)
+
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Delete the token after successful password reset
 	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ForgetPasswordTokenScope, user.ID)
+
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Respond with success
 	app.successResponse(w, http.StatusOK, envelope{
 		"message": "Password reset successfully.",
 	})
