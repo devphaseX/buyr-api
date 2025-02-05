@@ -11,7 +11,6 @@ type createUserAddressRequest struct {
 	FirstName     string            `json:"first_name" validate:"required,max=100"`
 	LastName      string            `json:"last_name" validate:"required,max=100"`
 	PhoneNumber   string            `json:"phone_number" validate:"required,e164"`
-	UserID        string            `json:"user_id" validate:"required,uuid"`
 	AddressType   store.AddressType `json:"address_type" validate:"required,oneof=billing shipping"`
 	StreetAddress string            `json:"street_address" validate:"required,max=255"`
 	City          string            `json:"city" validate:"required,max=100"`

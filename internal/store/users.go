@@ -49,6 +49,12 @@ func (a AdminLevel) GetRank() int {
 	return adminLevelWeights[a]
 }
 
+type TwoFactorType string
+
+const (
+	TotpFactorType TwoFactorType = "totp"
+)
+
 var AnonymousUser = &User{}
 
 // User represents a user in the system.
@@ -1467,10 +1473,20 @@ func (m *UserModel) ChangePassword(ctx context.Context, user *User) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
-	_, err := m.db.ExecContext(ctx, query, user.ID, user.Password.hash)
+	result, err := m.db.ExecContext(ctx, query, user.Password.hash, user.ID)
 
 	if err != nil {
 		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
 	}
 
 	return nil

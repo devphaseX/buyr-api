@@ -415,7 +415,6 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 		signin2faPayload *signIn2faPayload
 	)
 
-	// Parse and validate the request body
 	if err := app.readJSON(w, r, &form); err != nil {
 		app.badRequestResponse(w, r, err)
 		return
@@ -426,14 +425,12 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Fetch the token from the cache
 	token, err := app.cacheStore.Tokens.Get(r.Context(), cache.Login2faTokenScope, form.MfaToken)
 	if err != nil {
 		app.unauthorizedResponse(w, r, "invalid or expired 2FA token")
 		return
 	}
 
-	// Verify the token scope
 	if token.Scope != cache.Login2faTokenScope {
 		app.unauthorizedResponse(w, r, "invalid 2FA token")
 		return
@@ -444,21 +441,18 @@ func (app *application) verifyLogin2faRecoveryCode(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Fetch the user
 	user, err := app.getUser(r.Context(), token.UserID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Decrypt recovery codes
 	recoveryCodes, err := encrypt.DecryptRecoveryCodes(user.RecoveryCodes, app.cfg.encryptConfig.masterSecretKey)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Verify the recovery code
 	validRecoveryCode := false
 	for _, code := range recoveryCodes {
 		if code == form.RecoveryCode {

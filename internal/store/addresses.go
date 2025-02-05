@@ -49,7 +49,7 @@ func NewAddressModel(db *sql.DB) AddressStore {
 }
 
 func clearAddressTypeDefault(ctx context.Context, tx *sql.Tx, userID string, addrType AddressType) error {
-	query := `UPDATE address
+	query := `UPDATE addresses
 			  SET is_default = false
 			  WHERE user_id = $1 AND address_type = $2 AND is_default = true`
 
@@ -68,7 +68,7 @@ func clearAddressTypeDefault(ctx context.Context, tx *sql.Tx, userID string, add
 func createAddress(ctx context.Context, tx *sql.Tx, address *Address) error {
 	address.ID = db.GenerateULID()
 
-	query := `INSERT INTO address(id, first_name, last_name, phone_number,
+	query := `INSERT INTO addresses(id, first_name, last_name, phone_number,
 			user_id, address_type, street_address,
 			city, state, postal_code, country, is_default)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
@@ -117,7 +117,7 @@ func (m *AddressModel) GetByID(ctx context.Context, ID string) (*Address, error)
 			  user_id, address_type, street_address,
 			  city, state, postal_code, country,
 	 	      is_default, created_at, updated_at
-			  FROM address WHERE id = $1`
+			  FROM addresses WHERE id = $1`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
@@ -146,7 +146,7 @@ func (m *AddressModel) GetByUserID(ctx context.Context, userID string) ([]*Addre
 			  user_id, address_type, street_address,
 			  city, state, postal_code, country,
 	 	      is_default, created_at, updated_at
-			  FROM address WHERE user_id = $1`
+			  FROM addresses WHERE user_id = $1`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
@@ -194,7 +194,7 @@ func (m *AddressModel) GetByUserID(ctx context.Context, userID string) ([]*Addre
 }
 
 func setAddressAsDefault(ctx context.Context, tx *sql.Tx, userID, addressID string, addrType AddressType) error {
-	query := `UPDATE address SET is_default = true WHERE id = $1 AND user_id = $2 AND address_type = $3`
+	query := `UPDATE addresses SET is_default = true WHERE id = $1 AND user_id = $2 AND address_type = $3`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 

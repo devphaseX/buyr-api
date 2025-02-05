@@ -85,13 +85,10 @@ func (app *application) setAuthCookiesAndRespond(
 }
 
 func (app *application) withPasswordAccess(r *http.Request, password string) bool {
-	user := getUserFromCtx(r)
+	userID := getUserFromCtx(r).ID
 
-	match, err := user.Password.Matches(password)
-
-	if err != nil {
-		app.logger.Panic(err)
-	}
+	user, _ := app.getUser(r.Context(), userID, true)
+	match, _ := user.Password.Matches(password)
 
 	return match
 }

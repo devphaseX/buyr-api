@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/validator"
 )
 
@@ -12,6 +13,7 @@ type ResponseErrorCode string
 const (
 	ErrorCodeBadRequest          ResponseErrorCode = "bad_request"
 	ErrorCodeRequired2FA         ResponseErrorCode = "required_2fa_code"
+	ErrDuplicateEmailCode        ResponseErrorCode = "duplicate_email"
 	ErrorInvalid2FACode          ResponseErrorCode = "invalid_2fa_code"
 	ErrorCodeUnauthorized        ResponseErrorCode = "unauthorized"
 	ErrorCodeForbidden           ResponseErrorCode = "forbidden"
@@ -33,12 +35,20 @@ func (app *application) badRequestResponse(w http.ResponseWriter, r *http.Reques
 	app.errorResponse(w, http.StatusBadRequest, err.Error(), envelope{"code": ErrorCodeBadRequest})
 }
 
-func (app *application) required2faCodeResponse(w http.ResponseWriter, r *http.Request, token string) {
+func (app *application) required2faCodeResponse(w http.ResponseWriter, r *http.Request, token string, twoFactorTypes []store.TwoFactorType) {
 	app.logger.Warnf("required 2fa error", "method", r.Method, "path", r.URL.Path, "error")
 
 	app.errorResponse(w, http.StatusForbidden, "2FA code is required", envelope{
-		"code":  ErrorCodeRequired2FA,
-		"token": token,
+		"code":             ErrorCodeRequired2FA,
+		"token":            token,
+		"two_factor_types": twoFactorTypes,
+	})
+}
+func (app *application) duplicateEmailResponse(w http.ResponseWriter, r *http.Request) {
+	app.logger.Warnf("duplicate email", "method", r.Method, "path", r.URL.Path, "error")
+
+	app.errorResponse(w, http.StatusForbidden, "the email address is already in use. Please use a different email", envelope{
+		"code": ErrDuplicateEmailCode,
 	})
 }
 

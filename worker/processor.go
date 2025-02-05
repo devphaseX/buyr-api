@@ -27,6 +27,7 @@ type TaskProcessor interface {
 	ProcessTaskSendRecoverAccountEmail(ctx context.Context, task *asynq.Task) error
 	ProcessTaskSendVendorActivationEmail(ctx context.Context, task *asynq.Task) error
 	ProcessTaskSendAdminOnboardEmail(ctx context.Context, task *asynq.Task) error
+	ProcessTaskSendVerifyEmail(ctx context.Context, task *asynq.Task) error
 }
 
 type RedisTaskProcessor struct {
@@ -79,6 +80,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskSendAdminOnboardEmail, processor.ProcessTaskSendAdminOnboardEmail)
 	mux.HandleFunc(TaskProcessOrderPayment, processor.ProcessTaskConfirmOrderPayment)
 	mux.HandleFunc(TaskSendOrderConfirmationEmail, processor.ProcessSendOrderConfirmationEmailTask)
+	mux.HandleFunc(TaskSendVerifyEmail, processor.ProcessTaskSendVerifyEmail)
 
 	if processor.cronTaskRunner != nil {
 		processor.cronTaskRunner.MountTasks(mux)

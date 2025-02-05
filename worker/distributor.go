@@ -13,6 +13,7 @@ type TaskDistributor interface {
 	DistributeTaskSendAdminOnboardEmail(ctx context.Context, payload *PayloadSendAdminOnboardEmail, opts ...asynq.Option) error
 	DistributeTaskProcessOrderPayment(ctx context.Context, payload *ProcessPaymentPayload, opts ...asynq.Option) error
 	DistributeTaskOrderConfirmationEmail(ctx context.Context, payload *SendOrderConfirmationEmailPayload, opts ...asynq.Option) error
+	DistributeTaskSendVerifyEmail(ctx context.Context, payload *PayloadSendVerifyEmail, opts ...asynq.Option) error
 }
 
 type RedisTaskDistributor struct {

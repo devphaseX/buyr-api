@@ -10,6 +10,7 @@ import (
 
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/store/cache"
+	"github.com/devphaseX/buyr-api.git/worker"
 )
 
 func (app *application) getCurrentUser(w http.ResponseWriter, r *http.Request) {
@@ -42,15 +43,20 @@ func (app *application) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	app.successResponse(w, http.StatusOK, response)
 }
 
-func (app *application) getUser(ctx context.Context, userID string) (*AuthInfo, error) {
+func (app *application) getUser(ctx context.Context, userID string, forceDbFetch ...bool) (*AuthInfo, error) {
 	var (
 		user *store.User
 		err  error
 	)
 
 	authInfo := &AuthInfo{}
+	var shouldForceDbFetch bool
 
-	if app.cfg.redisCfg.enabled {
+	if len(forceDbFetch) > 0 {
+		shouldForceDbFetch = forceDbFetch[0]
+	}
+
+	if !shouldForceDbFetch && app.cfg.redisCfg.enabled {
 		user, err = app.cacheStore.Users.Get(ctx, userID)
 
 		if !(err == nil || errors.Is(err, store.ErrRecordNotFound)) {
@@ -170,7 +176,7 @@ func (app *application) changePassword(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		app.required2faCodeResponse(w, r, token.Plaintext)
+		app.required2faCodeResponse(w, r, token.Plaintext, []store.TwoFactorType{store.TotpFactorType})
 		return
 	}
 
@@ -291,6 +297,20 @@ func (app *application) initiateEmailChange(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	existingUser, err := app.store.Users.GetByEmail(r.Context(), form.NewEmail)
+
+	if err != nil {
+		if !errors.Is(err, store.ErrRecordNotFound) {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	if existingUser != nil {
+		app.duplicateEmailResponse(w, r)
+		return
+	}
+
 	if user.TwoFactorAuthEnabled {
 		payload, _ := json.Marshal(initialEmailChangePayload{Email: form.NewEmail})
 
@@ -308,7 +328,7 @@ func (app *application) initiateEmailChange(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		app.required2faCodeResponse(w, r, token.Plaintext)
+		app.required2faCodeResponse(w, r, token.Plaintext, []store.TwoFactorType{store.TotpFactorType})
 		return
 	}
 
@@ -325,6 +345,31 @@ func (app *application) sendEmailChangeToken(w http.ResponseWriter, r *http.Requ
 	}
 
 	err = app.cacheStore.Tokens.Insert(r.Context(), token)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	flatUser, err := app.store.Users.FlattenUser(r.Context(), user.User)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	username := fmt.Sprintf("%s %s", flatUser.FirstName, flatUser.LastName)
+
+	if username == " " {
+		username = flatUser.BusinessName
+	}
+
+	err = app.taskDistributor.DistributeTaskSendVerifyEmail(r.Context(), &worker.PayloadSendVerifyEmail{
+		Username:  username,
+		Token:     token.Plaintext,
+		Email:     payload.Email,
+		ClientURL: app.cfg.clientURL,
+	})
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -394,6 +439,13 @@ func (app *application) verifyEmailChange2fa(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ChangeEmail2faTokenScope, user.ID)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	app.sendEmailChangeToken(w, r, user, payload)
 }
 
@@ -404,7 +456,6 @@ type verifyEmailChangeRequest struct {
 func (app *application) verifyEmailChange(w http.ResponseWriter, r *http.Request) {
 	var (
 		form verifyEmailChangeRequest
-		user = getUserFromCtx(r)
 	)
 
 	if err := app.readJSON(w, r, &form); err != nil {
@@ -431,6 +482,13 @@ func (app *application) verifyEmailChange(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	user, err := app.getUser(r.Context(), token.UserID)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	var payload initialEmailChangePayload
 
 	err = json.Unmarshal(token.Data, &payload)
@@ -440,7 +498,14 @@ func (app *application) verifyEmailChange(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err = app.store.Users.UpdateEmail(r.Context(), user.User.ID, payload.Email)
+	err = app.store.Users.UpdateEmail(r.Context(), user.ID, payload.Email)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.cacheStore.Tokens.DeleteAllForUser(r.Context(), cache.ChangeEmailTokenScope, user.ID)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)

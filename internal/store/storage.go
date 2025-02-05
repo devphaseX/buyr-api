@@ -12,7 +12,7 @@ import (
 var (
 	QueryTimeoutDuration      = time.Second * 5
 	ErrRecordNotFound         = errors.New("record not found")
-	ErrDuplicateEmail         = errors.New("email already exists")
+	ErrDuplicateEmail         = errors.New("ethe email address is already in use. Please use a different email.")
 	ErrSessionCannotBeExtends = errors.New("session cannot be extended")
 	ErrUnknownUserRole        = fmt.Errorf("unknown user role")
 )

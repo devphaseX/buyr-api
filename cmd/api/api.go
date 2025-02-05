@@ -155,18 +155,17 @@ func (app *application) routes() http.Handler {
 
 		r.Route("/users", func(r chi.Router) {
 			r.Patch("/activate-account", app.activateUser)
+			r.Patch("/email/verify-email", app.verifyEmailChange)
 
 			r.Group(func(r chi.Router) {
 				r.Use(app.requireAuthenicatedUser)
 				r.Get("/", app.getNormalUsers)
 				r.Get("/current", app.getCurrentUser)
-				r.Post("/change-password", app.changePassword)
+				r.Patch("/change-password", app.changePassword)
 				r.Patch("/change-password/2fa", app.verifyChangePassword2fa)
 
-				r.Post("/email/initiate", app.initiateEmailChange)
+				r.Post("/email/initiate-change", app.initiateEmailChange)
 				r.Post("/email/verify-2fa", app.verifyEmailChange2fa)
-				r.Patch("/email/verify-email", app.verifyEmailChange)
-
 			})
 
 		})
