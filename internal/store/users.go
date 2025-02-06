@@ -69,6 +69,7 @@ type User struct {
 	AuthSecret           string     `json:"-"`
 	ForcePasswordChange  bool       `json:"force_password_change"`
 	TwoFactorAuthEnabled bool       `json:"-"`
+	Version              int        `json:"-"`
 	IsActive             bool       `json:"is_active"`
 	Disabled             bool       `json:"-"`
 	CreatedAt            time.Time  `json:"created_at"`
@@ -500,7 +501,7 @@ func (s *UserModel) CreateAdminUser(ctx context.Context, user *AdminUser) error 
 
 func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 	query := `SELECT id, email, password_hash,force_password_change,
-			  avatar_url, role, email_verified_at,
+			  avatar_url, role, email_verified_at, version,
 			  is_active, two_factor_auth_enabled, auth_secret,recovery_codes, created_at, updated_at FROM users
 			  WHERE id = $1
 	`
@@ -520,6 +521,7 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 		&avatarURL,
 		&user.Role,
 		&emailVerifiedAt,
+		&user.Version,
 		&isActive,
 		&user.TwoFactorAuthEnabled,
 		&authSecret,
@@ -558,7 +560,7 @@ func (s *UserModel) GetByID(ctx context.Context, userID string) (*User, error) {
 
 func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error) {
 	query := `SELECT id, email, password_hash,force_password_change,
-			  avatar_url, role, email_verified_at,
+			  avatar_url, role, email_verified_at, version,
 			  is_active,  two_factor_auth_enabled, auth_secret, recovery_codes, created_at, updated_at FROM users
 			  WHERE email ilike $1
 	`
@@ -578,6 +580,7 @@ func (s *UserModel) GetByEmail(ctx context.Context, email string) (*User, error)
 		&avatarURL,
 		&user.Role,
 		&emailVerifiedAt,
+		&user.Version,
 		&isActive,
 		&user.TwoFactorAuthEnabled,
 		&authSecret,

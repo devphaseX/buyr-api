@@ -56,7 +56,7 @@ type OrderStore interface {
 }
 
 type OrderItemStore interface {
-	GetItemsByOrderID(ctx context.Context, orderID string) ([]*CartItem, error)
+	GetItemsByOrderID(ctx context.Context, orderID string) ([]*OrderItem, error)
 }
 
 type OrderModel struct {
@@ -278,7 +278,7 @@ func (m *OrderModel) UpdateStatus(ctx context.Context, orderID string, status Or
 	return nil
 }
 
-func (m *OrderItemModel) GetItemsByOrderID(ctx context.Context, orderID string) ([]*CartItem, error) {
+func (m *OrderItemModel) GetItemsByOrderID(ctx context.Context, orderID string) ([]*OrderItem, error) {
 	// SQL query to fetch OrderItems and their associated Products by orderID
 	query := `
         SELECT
@@ -303,7 +303,7 @@ func (m *OrderItemModel) GetItemsByOrderID(ctx context.Context, orderID string) 
 	}
 	defer rows.Close()
 
-	var cartItems []*CartItem
+	var orderItems []*OrderItem
 	for rows.Next() {
 		var orderItem OrderItem
 		var product Product
@@ -339,14 +339,8 @@ func (m *OrderItemModel) GetItemsByOrderID(ctx context.Context, orderID string) 
 		orderItem.Product = product
 
 		// Convert OrderItem to CartItem
-		cartItem := &CartItem{
-			ID:        orderItem.ID,
-			ProductID: orderItem.ProductID,
-			Quantity:  orderItem.Quantity,
-			Price:     orderItem.Price,
-			Product:   &orderItem.Product,
-		}
-		cartItems = append(cartItems, cartItem)
+
+		orderItems = append(orderItems, &orderItem)
 	}
 
 	// Check for errors after iterating through rows
@@ -354,7 +348,7 @@ func (m *OrderItemModel) GetItemsByOrderID(ctx context.Context, orderID string) 
 		return nil, fmt.Errorf("row iteration error: %w", err)
 	}
 
-	return cartItems, nil
+	return orderItems, nil
 }
 
 func (s *OrderModel) GetAbandonedOrders(ctx context.Context, cutoffTime time.Time) ([]Order, error) {

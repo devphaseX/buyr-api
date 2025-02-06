@@ -102,7 +102,7 @@ func (app *application) createUserSessionAndSetCookies(w http.ResponseWriter, r 
 		UserID:     user.ID,
 		IP:         r.RemoteAddr,
 		UserAgent:  r.UserAgent(),
-		Version:    1,
+		Version:    user.Version,
 		ExpiresAt:  time.Now().Add(sessionExpiry),
 		RememberMe: RememberMe,
 	}

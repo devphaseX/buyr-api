@@ -7,10 +7,10 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/devphaseX/buyr-api.git/internal/payment"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/worker"
 	"github.com/stripe/stripe-go/v81"
-	"github.com/stripe/stripe-go/v81/checkout/session"
 	"github.com/stripe/stripe-go/v81/webhook"
 )
 
@@ -210,62 +210,38 @@ func (app *application) initiatePayment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cartItems, err := app.store.OrderItems.GetItemsByOrderID(r.Context(), order.ID)
+	orderItems, err := app.store.OrderItems.GetItemsByOrderID(r.Context(), order.ID)
 
 	if err != nil {
 		app.serverErrorResponse(w, r, fmt.Errorf("failed to fetch order items: %w", err))
 		return
 	}
-	switch form.PaymentMethod {
-	case "stripe":
 
-		lineItems := []*stripe.CheckoutSessionLineItemParams{}
+	payment, err := payment.NewPayment(form.PaymentMethod, &payment.Config{
+		Stripe: payment.StripeConfig{
+			SuccessURL: app.cfg.stripe.successURL,
+			CancelURL:  app.cfg.stripe.cancelURL,
+		},
+	})
 
-		for _, item := range cartItems {
-			lineItems = append(lineItems, &stripe.CheckoutSessionLineItemParams{
-				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-					Currency: stripe.String("usd"),
-					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String(item.Product.Name),
-					},
-					UnitAmount: stripe.Int64(int64(item.Price * 100)), // Convert to cents
-				},
-				Quantity: stripe.Int64(int64(item.Quantity)),
-			})
-		}
-
-		params := &stripe.CheckoutSessionParams{
-			PaymentMethodTypes: stripe.StringSlice([]string{
-				"card",
-			}),
-			LineItems:  lineItems,
-			Mode:       stripe.String(string(stripe.CheckoutSessionModePayment)),
-			SuccessURL: stripe.String(app.cfg.stripe.successURL + "?session_id={CHECKOUT_SESSION_ID}"),
-			CancelURL:  stripe.String(app.cfg.stripe.cancelURL),
-			Metadata: map[string]string{
-				"order_id": orderID,
-			},
-		}
-
-		// Create the Stripe Checkout Session.
-		session, err := session.New(params)
-		if err != nil {
-			app.serverErrorResponse(w, r, fmt.Errorf("failed to create Stripe Checkout Session: %w", err))
-			return
-		}
-
-		// // Return the Stripe Checkout Session URL to the client.
-		response := envelope{
-			"message": "payment initiated successfully",
-			"data": map[string]interface{}{
-				"payment_url": session.URL,
-			},
-		}
-		app.successResponse(w, http.StatusOK, response)
-
-	default:
-		app.badRequestResponse(w, r, errors.New("invalid payment method"))
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
 	}
+
+	paymentURL, err := payment.InitiatePayment(order, orderItems)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	response := envelope{
+		"message": "payment initiated successfully",
+		"data": envelope{
+			"payment_url": paymentURL,
+		},
+	}
+	app.successResponse(w, http.StatusOK, response)
 
 }
 
