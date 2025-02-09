@@ -29,7 +29,7 @@ type SessionStore interface {
 	ValidateSession(ctx context.Context, sessionID string, version int) (*Session, *User, bool, error)
 	InvalidateSession(ctx context.Context, sessionID string) error
 	GetSessionByID(ctx context.Context, sessionID string) (*Session, *User, error)
-	UpdateLastUsed(ctx context.Context, sessionID string) error
+	UpdateLastUsed(ctx context.Context, sessionID string, IP string) error
 	GetSessionsByUserID(
 		ctx context.Context,
 		userID string,
@@ -310,10 +310,10 @@ func (s *SessionModel) ExtendSessionAndGenerateRefreshToken(
 	return newRefreshToken, nil
 }
 
-func (s *SessionModel) UpdateLastUsed(ctx context.Context, sessionID string) error {
-	query := `UPDATE sessions SET last_used = NOW() WHERE id = $1`
+func (s *SessionModel) UpdateLastUsed(ctx context.Context, sessionID, IP string) error {
+	query := `UPDATE sessions SET last_used = NOW(), ip = $2 WHERE id = $1`
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
-	_, err := s.db.ExecContext(ctx, query, sessionID)
+	_, err := s.db.ExecContext(ctx, query, sessionID, IP)
 	return err
 }

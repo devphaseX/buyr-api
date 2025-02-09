@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/devphaseX/buyr-api.git/internal/auth"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/justinas/nosurf"
 )
@@ -64,6 +65,10 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 		user.populateAdminFlags()
 		// Add the user to the request context
 		ctx := context.WithValue(r.Context(), authContextKey, user)
+
+		app.background(func() {
+			app.updateSessionActivity(r, payload)
+		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -173,4 +178,9 @@ func isBrowserRequest(r *http.Request) bool {
 	// Consider it a browser request if it has a browser-like User-Agent
 	// and either accepts HTML or has Sec-Fetch headers
 	return hasBrowserUA && (hasAcceptHeader || hasSecHeaders)
+}
+
+func (app *application) updateSessionActivity(r *http.Request, payload *auth.AccessPayload) {
+	ctx := context.Background()
+	app.store.Sessions.UpdateLastUsed(ctx, payload.SessionID, r.RemoteAddr)
 }
