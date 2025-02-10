@@ -221,6 +221,14 @@ func (app *application) routes() http.Handler {
 			r.Get("/default", app.setDefaultAddress)
 		})
 
+		r.Route("/option-types", func(r chi.Router) {
+			r.With(app.requireAuthenicatedUser).Group(func(r chi.Router) {
+				r.Use(app.CheckPermissions(RequireRoles(store.VendorRole, store.AdminRole)))
+				r.Get("/", app.getOptionTypes)
+				r.Get("/{id}", app.getOptionTypeByID)
+			})
+		})
+
 		r.Route("/products", func(r chi.Router) {
 			r.Get("/", app.getProducts)
 
@@ -307,6 +315,16 @@ func (app *application) routes() http.Handler {
 				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelManager))).Delete("/{id}", app.removeCategory)
 
 				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelManager))).Put("/{id}/visibility", app.setCategoryVisibility)
+			})
+
+			r.Route("/option-types", func(r chi.Router) {
+				r.With(app.CheckPermissions(MinimumAdminLevel(store.AdminLevelManager))).Group(func(r chi.Router) {
+					r.Post("/", app.createOptionType)
+					r.Post("/{id}/values", app.addOptionValues)
+					r.Put("/{id}", app.updateOptionType)
+					r.Put("/values/{id}", app.updateOptionValue)
+					r.Delete("/values/{id}", app.deleteOptionValue)
+				})
 			})
 		})
 	})

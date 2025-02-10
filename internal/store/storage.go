@@ -32,6 +32,7 @@ type Storage struct {
 	Payments   PaymentStore
 	Promos     PromoStore
 	Address    AddressStore
+	OptionType OptionTypeStore
 }
 
 func NewStorage(db *sql.DB) *Storage {
@@ -50,6 +51,7 @@ func NewStorage(db *sql.DB) *Storage {
 		Payments:   NewPaymentModel(db),
 		Promos:     NewPromoModel(db),
 		Address:    NewAddressModel(db),
+		OptionType: NewOptionTypeModel(db),
 	}
 }
 

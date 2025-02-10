@@ -69,6 +69,25 @@ type ProductFeature struct {
 	ProductID      string                 `json:"product_id"`
 }
 
+type ProductVariant struct {
+	ID              string    `json:"id"`
+	ProductID       string    `json:"product_id"`
+	SKU             string    `json:"sku"`
+	PriceAdjustment float64   `json:"price_adjustment"`
+	StockQuantity   int       `json:"stock_quantity"`
+	IsActive        bool      `json:"is_active"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+type ProductVariantOptionValue struct {
+	ID            string    `json:"id"`
+	VariantID     string    `json:"variant_id"`
+	OptionValueID string    `json:"option_value_id"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
 type ProductStore interface {
 	Create(ctx context.Context, product *Product) error
 	Publish(ctx context.Context, productID string, vendorID string) error
