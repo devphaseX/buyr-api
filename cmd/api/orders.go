@@ -313,6 +313,43 @@ func (app *application) getUserViewOrderLists(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	app.successResponse(w, http.StatusOK, user)
+	orders, metadata, err := app.store.Orders.GetOrdersForUser(r.Context(), user.ID, fq)
 
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	response := envelope{
+		"orders":   orders,
+		"metadata": metadata,
+	}
+
+	app.successResponse(w, http.StatusOK, response)
+}
+
+func (app *application) getOrderForUserByID(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromCtx(r)
+	orderID := app.readStringID(r, "orderID")
+
+	order, err := app.store.Orders.GetOrderForUserByID(r.Context(), user.ID, orderID)
+
+	if err != nil {
+		switch {
+
+		case errors.Is(err, store.ErrRecordNotFound):
+			app.notFoundResponse(w, r, "order not found")
+
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+
+		return
+	}
+
+	response := envelope{
+		"order": order,
+	}
+
+	app.successResponse(w, http.StatusOK, response)
 }

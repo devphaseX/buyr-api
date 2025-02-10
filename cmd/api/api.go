@@ -206,8 +206,12 @@ func (app *application) routes() http.Handler {
 		})
 
 		r.Route("/orders", func(r chi.Router) {
-			r.Post("/webhook/stripe", app.handleStripeWebhook)
-			r.Get("/", app.getUserViewOrderLists)
+			r.Use(app.requireAuthenicatedUser)
+			r.With(app.CheckPermissions(RequireRoles(store.UserRole))).Group(func(r chi.Router) {
+				r.Post("/webhook/stripe", app.handleStripeWebhook)
+				r.Get("/", app.getUserViewOrderLists)
+				r.Get("/{orderID}", app.getOrderForUserByID)
+			})
 		})
 
 		r.Route("/addresses", func(r chi.Router) {

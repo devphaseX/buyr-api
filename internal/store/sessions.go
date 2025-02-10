@@ -142,7 +142,7 @@ func (s *SessionModel) GetSessionByID(ctx context.Context, sessionID string) (*S
 		 s.created_at,s.updated_at, s.remember_me, s.max_renewal_duration,
 		 u.id, u.email,
 		 u.avatar_url, u.role,
-	 	 u.email_verified_at, u.is_active,
+	 	 u.email_verified_at, u.is_active, u.version,
 		 u.created_at, u.updated_at
 		FROM sessions s
 		INNER JOIN users  u ON u.id = s.user_id
@@ -177,6 +177,7 @@ func (s *SessionModel) GetSessionByID(ctx context.Context, sessionID string) (*S
 		&user.Role,
 		&emailVerifiedAt,
 		&user.IsActive,
+		&user.Version,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)

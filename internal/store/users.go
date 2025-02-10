@@ -332,8 +332,8 @@ func NewUserModel(db *sql.DB) UserStorage {
 // createUser inserts a new user into the database.
 func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	query := `
-		INSERT INTO users(id, email, avatar_url, password_hash, is_active, email_verified_at role, force_password_change)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO users(id, email, avatar_url, password_hash, is_active, email_verified_at role, force_password_change, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -342,7 +342,7 @@ func createUser(ctx context.Context, tx *sql.Tx, user *User) error {
 	}
 
 	id := db.GenerateULID()
-	args := []any{id, user.Email, user.AvatarURL, user.Password.hash, user.IsActive, user.EmailVerifiedAt, user.Role, user.ForcePasswordChange}
+	args := []any{id, user.Email, user.AvatarURL, user.Password.hash, user.IsActive, user.EmailVerifiedAt, user.Role, user.ForcePasswordChange, user.Version}
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()

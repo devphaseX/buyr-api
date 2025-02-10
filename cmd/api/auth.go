@@ -514,6 +514,7 @@ func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
 
 	session, user, canExtend, err := app.store.Sessions.ValidateSession(r.Context(), claims.SessionID, claims.Version)
 
+	fmt.Println(user.Version, session.Version)
 	if err != nil || session == nil || user.Version != session.Version {
 		app.unauthorizedResponse(w, r, "invalid session")
 		return

@@ -53,6 +53,8 @@ type OrderStore interface {
 	GetOrderByID(ctx context.Context, id string) (*Order, error)
 	UpdateStatus(ctx context.Context, orderID string, status OrderStatus) error
 	GetAbandonedOrders(ctx context.Context, cutoffTime time.Time) ([]Order, error)
+	GetOrdersForUser(ctx context.Context, userID string, fq PaginateQueryFilter) ([]*Order, Metadata, error)
+	GetOrderForUserByID(ctx context.Context, userID, orderID string) (*UserOrder, error)
 }
 
 type OrderItemStore interface {
@@ -77,15 +79,16 @@ func NewOrderItemModel(db *sql.DB) OrderItemStore {
 
 func createOrder(ctx context.Context, tx *sql.Tx, order *Order) error {
 	order.ID = db.GenerateULID()
-	query := `INSERT INTO orders(id, user_id, total_amount, promo_code, shipping_address_id, status, paid, payment_method)
-			 VALUES($1, $2, $3, $4, $5, $6, $7) RETURNING created_at, updated_at
+	query := `INSERT INTO orders(id, user_id, total_amount, promo_code, discount, shipping_address_id, status, paid, payment_method)
+			 VALUES($1, $2, $3, $4, $5, $6, $7, $8) RETURNING created_at, updated_at
 	`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 
 	defer cancel()
 
-	args := []any{order.ID, order.UserID, order.TotalAmount, order.PromoCode, order.ShippingAddressId, order.Status, order.Paid, order.PaymentMethod}
+	args := []any{order.ID, order.UserID, order.TotalAmount, order.PromoCode,
+		order.Discount, order.ShippingAddressId, order.Status, order.Paid, order.PaymentMethod}
 	err := tx.QueryRowContext(ctx, query, args...).Scan(&order.CreatedAt, &order.UpdatedAt)
 
 	if err != nil {
@@ -380,4 +383,223 @@ func (s *OrderModel) GetAbandonedOrders(ctx context.Context, cutoffTime time.Tim
 	}
 
 	return orders, nil
+}
+
+func (m *OrderModel) GetOrdersForUser(ctx context.Context, userID string, fq PaginateQueryFilter) ([]*Order, Metadata, error) {
+	query := `SELECT count(*) over(), id, user_id, total_amount, promo_code, discount, status, paid,
+				payment_method, shipping_address_id, created_at, updated_at
+				FROM orders WHERE user_id = $1`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+
+	defer cancel()
+
+	var (
+		orders       = []*Order{}
+		totalRecords int
+	)
+
+	rows, err := m.db.QueryContext(ctx, query, userID)
+
+	if err != nil {
+		return nil, Metadata{}, nil
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		order := &Order{}
+
+		var (
+			paymentMethod     sql.NullString
+			promoCode         sql.NullString
+			discount          sql.NullFloat64
+			shippingAddressID sql.NullString
+		)
+
+		err := rows.Scan(&totalRecords, &order.ID, &order.UserID, &order.TotalAmount, &promoCode, &discount, &order.Status,
+			&order.Paid, &paymentMethod, &shippingAddressID, &order.CreatedAt, &order.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, Metadata{}, fmt.Errorf("failed to parse order row item: %w", err)
+		}
+
+		if paymentMethod.Valid {
+			order.PaymentMethod = paymentMethod.String
+		}
+
+		if promoCode.Valid {
+			order.PromoCode = promoCode.String
+		}
+
+		if discount.Valid {
+			order.Discount = discount.Float64
+		}
+
+		if shippingAddressID.Valid {
+			order.ShippingAddressId = shippingAddressID.String
+		}
+
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, Metadata{}, fmt.Errorf("failed to retrive orders rows: %w", err)
+	}
+
+	metadata := calculateMetadata(totalRecords, fq.Page, fq.PageSize)
+
+	return orders, metadata, nil
+}
+
+// UserOrder struct which contains Order details and associated OrderItems with Product details.
+type UserOrder struct {
+	Order      Order                          `json:"order"`
+	OrderItems []*OrderItemWithProductDetails `json:"order_items"`
+}
+
+// OrderItemWithProductDetails struct which contains OrderItem details and associated Product details.
+type OrderItemWithProductDetails struct {
+	OrderItem OrderItem `json:"order_item"`
+	Product   Product   `json:"product"`
+}
+
+// GetOrderForUserByID retrieves an order for a specific user by order ID, including associated order items and product details.
+func (m *OrderModel) GetOrderForUserByID(ctx context.Context, userID, orderID string) (*UserOrder, error) {
+	// Query to fetch the order details for a specific user and order ID.
+	orderQuery := `
+		SELECT
+			id, user_id, total_amount, promo_code, discount, status, paid,
+			payment_method, shipping_address_id, created_at, updated_at
+		FROM orders
+		WHERE id = $1 AND user_id = $2
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	order := &Order{}
+	var (
+		paymentMethod     sql.NullString
+		promoCode         sql.NullString
+		discount          sql.NullFloat64
+		shippingAddressID sql.NullString
+	)
+
+	// Execute the order query.
+	err := m.db.QueryRowContext(ctx, orderQuery, orderID, userID).Scan(
+		&order.ID, &order.UserID, &order.TotalAmount, &promoCode, &discount, &order.Status,
+		&order.Paid, &paymentMethod, &shippingAddressID, &order.CreatedAt, &order.UpdatedAt,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, fmt.Errorf("failed to query order: %w", err)
+		}
+	}
+
+	// Set nullable fields.
+	if paymentMethod.Valid {
+		order.PaymentMethod = paymentMethod.String
+	}
+	if promoCode.Valid {
+		order.PromoCode = promoCode.String
+	}
+	if discount.Valid {
+		order.Discount = discount.Float64
+	}
+	if shippingAddressID.Valid {
+		order.ShippingAddressId = shippingAddressID.String
+	}
+
+	// Query to fetch order items and their associated product details for the given order ID.
+	orderItemsQuery := `
+		SELECT
+			oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price, oi.created_at, oi.updated_at,
+			p.id, p.name, p.description, p.stock_quantity, p.status, p.published,
+			p.total_items_sold_count, p.vendor_id, p.discount, p.price, p.category_id,
+			p.created_at, p.updated_at,
+			COALESCE(
+				(SELECT json_agg(DISTINCT jsonb_build_object(
+					'id', pi.id,
+					'url', pi.url,
+					'is_primary', pi.is_primary,
+					'product_id', pi.product_id,
+					'created_at', pi.created_at,
+					'updated_at', pi.updated_at
+				))
+				FROM product_images pi
+				WHERE pi.product_id = p.id),
+				'[]'
+			) AS images,
+			COALESCE(
+				(SELECT json_agg(DISTINCT jsonb_build_object(
+					'id', pf.id,
+					'title', pf.title,
+					'view', pf.view,
+					'product_id', pf.product_id,
+					'feature_entries', pf.feature_entries
+				))
+				FROM product_features pf
+				WHERE pf.product_id = p.id),
+				'[]'
+			) AS features
+		FROM order_items oi
+		JOIN products p ON oi.product_id = p.id
+		WHERE oi.order_id = $1
+	`
+
+	// Execute the order items query.
+	rows, err := m.db.QueryContext(ctx, orderItemsQuery, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query order items: %w", err)
+	}
+	defer rows.Close()
+
+	var orderItems []*OrderItemWithProductDetails
+	// Iterate over the rows and scan the data into the structs.
+	for rows.Next() {
+		var (
+			orderItem   OrderItem
+			product     Product
+			imageJSON   string
+			featureJSON string
+		)
+
+		err := rows.Scan(
+			&orderItem.ID, &orderItem.OrderID, &orderItem.ProductID, &orderItem.Quantity,
+			&orderItem.Price, &orderItem.CreatedAt, &orderItem.UpdatedAt,
+			&product.ID, &product.Name, &product.Description, &product.StockQuantity,
+			&product.Status, &product.Published, &product.TotalItemsSoldCount, &product.VendorID,
+			&product.Discount, &product.Price, &product.CategoryID, &product.CreatedAt, &product.UpdatedAt,
+			&imageJSON, &featureJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan order item and product details: %w", err)
+		}
+
+		product.Images = parseImages(imageJSON)
+		product.Features = parseFeatures(featureJSON)
+
+		orderItems = append(orderItems, &OrderItemWithProductDetails{
+			OrderItem: orderItem,
+			Product:   product,
+		})
+	}
+
+	// Check for errors after iterating through rows.
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over order item rows: %w", err)
+	}
+
+	// Construct the UserOrder struct and return.
+	userOrder := &UserOrder{
+		Order:      *order,
+		OrderItems: orderItems,
+	}
+
+	return userOrder, nil
 }
