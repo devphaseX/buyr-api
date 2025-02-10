@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -257,7 +256,6 @@ func (app *application) getProduct(w http.ResponseWriter, r *http.Request) {
 
 	if user.IsAnonymous || !((user.IsVendor() && user.ID == vendorUser.UserID) || user.Role == store.AdminRole) {
 		category, err := app.store.Category.GetByID(r.Context(), product.CategoryID)
-		fmt.Println(category, err)
 		if err != nil {
 			switch {
 			case errors.Is(err, store.ErrRecordNotFound):

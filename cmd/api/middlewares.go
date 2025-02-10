@@ -69,6 +69,7 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 		app.background(func() {
 			app.updateSessionActivity(r, payload)
 		})
+		r.Header.Set("X-User-ID", user.ID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

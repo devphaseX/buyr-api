@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/devphaseX/buyr-api.git/internal/auth"
@@ -11,6 +12,7 @@ import (
 	"github.com/devphaseX/buyr-api.git/internal/env"
 	"github.com/devphaseX/buyr-api.git/internal/fileobject"
 	"github.com/devphaseX/buyr-api.git/internal/mailer"
+	"github.com/devphaseX/buyr-api.git/internal/ratelimiter"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/store/cache"
 	"github.com/devphaseX/buyr-api.git/internal/totp.go"
@@ -21,8 +23,6 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"github.com/stripe/stripe-go/v81"
-	"github.com/ulule/limiter/v3"
-	lredis "github.com/ulule/limiter/v3/drivers/store/redis"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -164,10 +164,6 @@ func main() {
 		DB:   cfg.redisCfg.db,
 	})
 
-	_, err = lredis.NewStoreWithOptions(redisClient, limiter.StoreOptions{
-		Prefix: "buyr_rate_limiter",
-	})
-
 	app := &application{
 		cfg:             cfg,
 		totp:            totp,
@@ -180,6 +176,16 @@ func main() {
 		taskDistributor: taskDistributor,
 		authToken:       authToken,
 	}
+
+	rateLimitService, err := ratelimiter.NewRateLimiterService(redisClient, ratelimiter.WithLimitReachedHandler(func(w http.ResponseWriter, r *http.Request) {
+		app.rateLimitExceededResponse(w)
+	}))
+
+	if err != nil {
+		logger.Panic(err)
+	}
+
+	app.rateLimitService = rateLimitService
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/devphaseX/buyr-api.git/internal/store"
@@ -48,8 +47,6 @@ func (app *application) createOptionType(w http.ResponseWriter, r *http.Request)
 
 		option.Values = append(option.Values, optionValue)
 	}
-
-	fmt.Printf("%+v", option)
 
 	if err := app.store.OptionType.Create(r.Context(), option); err != nil {
 		app.serverErrorResponse(w, r, err)

@@ -19,6 +19,7 @@ const (
 	ErrorCodeForbidden           ResponseErrorCode = "forbidden"
 	ErrorCodeNotFound            ResponseErrorCode = "not_found"
 	ErrorCodeConflict            ResponseErrorCode = "conflict"
+	ErrorTooManyRequest          ResponseErrorCode = "too_many_requests"
 	ErrorCodeInvalidCredentials  ResponseErrorCode = "invalid_credentials"
 	ErrorCodeInternalServerError ResponseErrorCode = "internal_server_error"
 )
@@ -60,6 +61,11 @@ func (app *application) unauthorizedResponse(w http.ResponseWriter, r *http.Requ
 	)
 
 	app.errorResponse(w, http.StatusUnauthorized, message, envelope{"code": ErrorCodeUnauthorized})
+}
+
+func (app *application) rateLimitExceededResponse(w http.ResponseWriter) {
+	message := "rate limit exceeded"
+	app.errorResponse(w, http.StatusTooManyRequests, message, envelope{"code": ErrorTooManyRequest})
 }
 
 func (app *application) conflictResponse(w http.ResponseWriter, r *http.Request, message string) {

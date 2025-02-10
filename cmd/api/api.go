@@ -13,6 +13,7 @@ import (
 
 	"github.com/devphaseX/buyr-api.git/internal/auth"
 	"github.com/devphaseX/buyr-api.git/internal/fileobject"
+	"github.com/devphaseX/buyr-api.git/internal/ratelimiter"
 	"github.com/devphaseX/buyr-api.git/internal/store"
 	"github.com/devphaseX/buyr-api.git/internal/store/cache"
 	"github.com/devphaseX/buyr-api.git/internal/totp.go"
@@ -20,22 +21,24 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-playground/form/v4"
+
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
 
 type application struct {
-	cfg             config
-	totp            totp.TOTP
-	wg              sync.WaitGroup
-	logger          *zap.SugaredLogger
-	store           *store.Storage
-	authToken       auth.AuthToken
-	googleOauth     *oauth2.Config
-	fileobject      fileobject.FileObject
-	formDecoder     *form.Decoder
-	cacheStore      *cache.Storage
-	taskDistributor worker.TaskDistributor
+	cfg              config
+	totp             totp.TOTP
+	wg               sync.WaitGroup
+	logger           *zap.SugaredLogger
+	store            *store.Storage
+	authToken        auth.AuthToken
+	googleOauth      *oauth2.Config
+	rateLimitService *ratelimiter.RateLimiterService
+	fileobject       fileobject.FileObject
+	formDecoder      *form.Decoder
+	cacheStore       *cache.Storage
+	taskDistributor  worker.TaskDistributor
 }
 
 type config struct {
@@ -119,6 +122,8 @@ type redisConfig struct {
 func (app *application) routes() http.Handler {
 	r := chi.NewRouter()
 
+	app.setRateLimit()
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
@@ -127,10 +132,15 @@ func (app *application) routes() http.Handler {
 
 	r.Use(app.AuthMiddleware)
 	r.Use(app.loadCSRF)
+	r.Use(app.rateLimitService.Middleware())
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/csrf-token", app.getCSRFToken)
-		r.Get("/categories", app.getPublicCategories)
+		r.With()
+
+		r.Route("/categories", func(r chi.Router) {
+			r.Get("/", app.getPublicCategories)
+		})
 
 		workDir, _ := os.Getwd()
 		filesDir := http.Dir(filepath.Join(workDir, "static"))
@@ -154,6 +164,7 @@ func (app *application) routes() http.Handler {
 		})
 
 		r.Route("/users", func(r chi.Router) {
+
 			r.Patch("/activate-account", app.activateUser)
 			r.Patch("/email/verify-email", app.verifyEmailChange)
 
