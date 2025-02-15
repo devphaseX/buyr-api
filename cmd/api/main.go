@@ -135,10 +135,6 @@ func main() {
 		BasePath: "./static",
 	}
 
-	if err != nil {
-		logger.Panic(err)
-	}
-
 	stripe.Key = cfg.stripe.apiKey
 	// For sample support and debugging, not required for production:
 	stripe.SetAppInfo(&stripe.AppInfo{

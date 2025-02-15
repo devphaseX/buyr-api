@@ -55,8 +55,8 @@ func NewSessionModel(db *sql.DB) SessionStore {
 
 func (s *SessionModel) Create(ctx context.Context, session *Session) error {
 	query := `INSERT INTO sessions (id, user_id, user_agent, ip,
-			  expires_at, remember_me, max_renewal_duration )
-	          VALUES ($1, $2, $3 , $4, $5, $6, $7)`
+			  expires_at, remember_me, version, max_renewal_duration )
+	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 	if session.ID == "" {
 		session.ID = db.GenerateULID()
 	}
@@ -71,6 +71,7 @@ func (s *SessionModel) Create(ctx context.Context, session *Session) error {
 		session.IP,
 		session.ExpiresAt,
 		session.RememberMe,
+		session.Version,
 		session.MaxRenewalDuration,
 	)
 

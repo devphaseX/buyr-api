@@ -32,26 +32,44 @@ func (app *application) setRateLimit() {
 	addEndpoint(ratelimiter.EndpointConfig{
 		Path:   "/v1/csrf-token",
 		Method: "GET",
-		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     60,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
-		}},
+		Rules: []ratelimiter.RateLimitRule{
+			{
+				Strategy:  ratelimiter.AnonymousStrategy,
+				Limit:     60,
+				Period:    time.Minute,
+				KeyFunc:   ipBaseRateLimiterGetter,
+				Condition: ratelimiter.IsNotAuthenticated,
+			},
+			{
+				Strategy:  ratelimiter.AuthenticatedStrategy,
+				Limit:     120,
+				Period:    time.Minute,
+				KeyFunc:   userBaseRateLimiterGetter,
+				Condition: ratelimiter.IsAuthenticated,
+			},
+		},
 	})
 
 	// GET /v1/categories
 	addEndpoint(ratelimiter.EndpointConfig{
 		Path:   "/v1/categories",
 		Method: "GET",
-		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     60,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
-		}},
+		Rules: []ratelimiter.RateLimitRule{
+			{
+				Strategy:  ratelimiter.AnonymousStrategy,
+				Limit:     60,
+				Period:    time.Minute,
+				KeyFunc:   ipBaseRateLimiterGetter,
+				Condition: ratelimiter.IsNotAuthenticated,
+			},
+			{
+				Strategy:  ratelimiter.AuthenticatedStrategy,
+				Limit:     120,
+				Period:    time.Minute,
+				KeyFunc:   userBaseRateLimiterGetter,
+				Condition: ratelimiter.IsAuthenticated,
+			},
+		},
 	})
 
 	// ================== Authentication Endpoints ==================
@@ -74,11 +92,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/sign-in",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -87,11 +104,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/sign-in/2fa",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -100,11 +116,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/sign-in/recovery-code",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -113,11 +128,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/refresh",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AuthenticatedStrategy,
-			Limit:     20,
-			Period:    time.Minute,
-			KeyFunc:   userBaseRateLimiterGetter,
-			Condition: ratelimiter.IsAuthenticated,
+			Strategy: ratelimiter.AuthenticatedStrategy,
+			Limit:    20,
+			Period:   time.Minute,
+			KeyFunc:  userBaseRateLimiterGetter,
 		}},
 	})
 
@@ -126,11 +140,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/forget-password",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -139,11 +152,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/reset-password/verify-email",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -152,11 +164,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/reset-password/2fa",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -165,11 +176,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/reset-password/recovery-code",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -178,11 +188,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/reset-password/change",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -191,11 +200,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/google",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     10,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    10,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -204,11 +212,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/auth/google/callback",
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     10,
-			Period:    time.Minute,
-			KeyFunc:   ipBaseRateLimiterGetter,
-			Condition: ratelimiter.IsNotAuthenticated,
+			Strategy: ratelimiter.AnonymousStrategy,
+			Limit:    10,
+			Period:   time.Minute,
+			KeyFunc:  ipBaseRateLimiterGetter,
 		}},
 	})
 
@@ -219,11 +226,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/users/activate-account",
 		Method: "PATCH",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AuthenticatedStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   userBaseRateLimiterGetter,
-			Condition: ratelimiter.IsAuthenticated,
+			Strategy: ratelimiter.AuthenticatedStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  userBaseRateLimiterGetter,
 		}},
 	})
 
@@ -232,11 +238,10 @@ func (app *application) setRateLimit() {
 		Path:   "/v1/users/email/verify-email",
 		Method: "PATCH",
 		Rules: []ratelimiter.RateLimitRule{{
-			Strategy:  ratelimiter.AuthenticatedStrategy,
-			Limit:     5,
-			Period:    time.Minute,
-			KeyFunc:   userBaseRateLimiterGetter,
-			Condition: ratelimiter.IsAuthenticated,
+			Strategy: ratelimiter.AuthenticatedStrategy,
+			Limit:    5,
+			Period:   time.Minute,
+			KeyFunc:  userBaseRateLimiterGetter,
 		}},
 	})
 
@@ -503,7 +508,7 @@ func (app *application) setRateLimit() {
 		Method: "POST",
 		Rules: []ratelimiter.RateLimitRule{{
 			Strategy:  ratelimiter.AnonymousStrategy,
-			Limit:     10,
+			Limit:     10_000,
 			Period:    time.Minute,
 			KeyFunc:   ipBaseRateLimiterGetter,
 			Condition: ratelimiter.IsNotAuthenticated,

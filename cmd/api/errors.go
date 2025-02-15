@@ -22,6 +22,8 @@ const (
 	ErrorTooManyRequest          ResponseErrorCode = "too_many_requests"
 	ErrorCodeInvalidCredentials  ResponseErrorCode = "invalid_credentials"
 	ErrorCodeInternalServerError ResponseErrorCode = "internal_server_error"
+	ErrorCodeOAuthAccount        ResponseErrorCode = "oauth_account"
+	ErrorPasswordResetRequired   ResponseErrorCode = "password_reset_required"
 )
 
 func (app *application) badRequestResponse(w http.ResponseWriter, r *http.Request, err error) {

@@ -136,7 +136,6 @@ func (app *application) routes() http.Handler {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/csrf-token", app.getCSRFToken)
-		r.With()
 
 		r.Route("/categories", func(r chi.Router) {
 			r.Get("/", app.getPublicCategories)
@@ -366,7 +365,11 @@ func (app *application) serve() error {
 
 		if err != nil {
 			shutdownError <- err
+			return
 		}
+
+		shutdownError <- nil
+
 	}()
 
 	app.logger.Infow("server has started", "addr", app.cfg.addr, "env", app.cfg.env)

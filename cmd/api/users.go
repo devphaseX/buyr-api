@@ -26,7 +26,7 @@ func (app *application) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	account, err := app.store.Users.GetUserAccountByUserID(r.Context(), userProfile.ID)
 
 	if err != nil {
-		if errors.Is(err, store.ErrRecordNotFound) {
+		if !errors.Is(err, store.ErrRecordNotFound) {
 			app.serverErrorResponse(w, r, err)
 			return
 		}

@@ -265,14 +265,29 @@ func (app *application) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	account, err := app.store.Users.GetUserAccountByUserID(r.Context(), user.ID)
-	if err != nil {
-		if !errors.Is(err, store.ErrRecordNotFound) {
+	if user.Password.IsSetPasswordEmpty() {
+		account, err := app.store.Users.GetUserAccountByUserID(r.Context(), user.ID)
+
+		if !(err == nil || errors.Is(err, store.ErrRecordNotFound)) {
 			app.serverErrorResponse(w, r, err)
 			return
 		}
-	} else if account != nil && user.Password.IsSetPasswordEmpty() {
-		app.forbiddenResponse(w, r, fmt.Sprintf("This account was registered via %s. Please log in using %s.", account.Provider, account.Provider))
+
+		if account != nil {
+			app.errorResponse(w, http.StatusUnprocessableEntity,
+				fmt.Sprintf("This account was registered via %s. Please log in using %s.", account.Provider, account.Provider),
+				envelope{
+					"code":     ErrorCodeOAuthAccount,
+					"provider": account.Provider,
+				})
+			return
+		}
+
+		app.errorResponse(w, http.StatusUnprocessableEntity,
+			errors.New("Your account requires a password reset. Please use the 'Forgot Password' feature to reset your password."),
+			envelope{
+				"code": ErrorPasswordResetRequired,
+			})
 		return
 	}
 
@@ -580,6 +595,29 @@ func (app *application) forgetPassword(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		app.successResponse(w, http.StatusOK, "")
 		return
+	}
+
+	// Check if the user registered via OAuth (password not set)
+	if user.Password.IsSetPasswordEmpty() {
+		account, err := app.store.Users.GetUserAccountByUserID(r.Context(), user.ID)
+
+		if err != nil {
+			if !errors.Is(err, store.ErrRecordNotFound) {
+				app.serverErrorResponse(w, r, err)
+				return
+			}
+		}
+
+		if account != nil {
+			app.errorResponse(w, http.StatusUnprocessableEntity,
+				"This account was registered via "+account.Provider+" OAuth. Please sign in using your "+account.Provider+" account.",
+				envelope{
+					"code":     ErrorCodeOAuthAccount,
+					"provider": account.Provider,
+				},
+			)
+			return
+		}
 	}
 
 	payload, err := json.Marshal(forgetPassword2faPayload{

@@ -76,12 +76,15 @@ func (app *application) googleCallbackHandler(w http.ResponseWriter, r *http.Req
 				FirstName: names[0],
 				LastName:  names[1],
 				User: store.User{
-					Email:           userData.Email, // Use userData.Email
-					Role:            store.UserRole,
-					EmailVerifiedAt: &emailVerifiedAt,
-					AvatarURL:       userData.Image,
-					IsActive:        true,
+					Email:     userData.Email, // Use userData.Email
+					Role:      store.UserRole,
+					AvatarURL: userData.Image,
+					IsActive:  true,
 				},
+			}
+
+			if userData.VerifiedEmail {
+				normalUser.User.EmailVerifiedAt = &emailVerifiedAt
 			}
 
 			err := app.store.Users.CreateNormalUser(r.Context(), normalUser)
@@ -115,15 +118,25 @@ func (app *application) googleCallbackHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if user.EmailVerifiedAt == nil {
+		err = app.store.Users.SetUserAccountAsActivate(r.Context(), user)
+
+		if err != nil {
+			app.serverErrorResponse(w, r, fmt.Errorf("failed to upsert account: %v", err))
+			return
+		}
+	}
+
 	app.createUserSessionAndSetCookies(w, r, user, true)
 
 }
 
 type UserData struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Image string `json:"picture"` // Field name varies by provider
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Email         string `json:"email"`
+	Image         string `json:"picture"`
+	VerifiedEmail bool   `json:"verified_email"`
 }
 
 func (app *application) fetchUserData(ctx context.Context, token *oauth2.Token) (*UserData, error) {

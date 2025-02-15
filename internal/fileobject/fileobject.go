@@ -5,6 +5,12 @@ import (
 	"io"
 )
 
+const (
+	_  = iota             // 0
+	KB = 1 << (10 * iota) // 1 << 10 = 1024
+	MB                    // 1 << 20 = 1,048,576
+)
+
 // FileObject defines the interface for file storage operations.
 type FileObject interface {
 	// UploadFile uploads a file to the storage and returns the file URL.
