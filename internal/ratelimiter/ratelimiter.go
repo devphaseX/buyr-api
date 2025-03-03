@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -51,6 +52,42 @@ func (s *DefaultRuleSelector) SelectRules(r *http.Request, rules []RateLimitRule
 	return selectedRules
 }
 
+// PathMatcher defines an interface for path matching.
+type PathMatcher interface {
+	Match(registeredPath, requestPath string) bool
+}
+
+// PatternPathMatcher implements PathMatcher using a pattern which supports dynamic matching.
+type PatternPathMatcher struct{}
+
+func (p *PatternPathMatcher) Match(registeredPath, requestPath string) bool {
+	// Escape the registered path for use in the regex.
+	regexString := "^" + regexp.QuoteMeta(registeredPath) + "$"
+
+	fmt.Println("before Regex:", regexString)
+
+	// Replace the dynamic parameters with regex groups.
+	regexString = replaceDynamicParams(regexString)
+
+	regex, err := regexp.Compile(regexString)
+	if err != nil {
+		// Handle regex error.
+		return false
+	}
+
+	fmt.Println("Regex:", regexString)
+
+	return regex.MatchString(requestPath)
+}
+
+// replaceDynamicParams replaces dynamic parameters in the path with regex groups.
+func replaceDynamicParams(path string) string {
+	// This regex matches any {param} in the path.
+	paramRegex := regexp.MustCompile(`\\\{[^\/]+\\\}`)
+	// Replace {param} with ([^/]+) which matches any character except /.
+	return paramRegex.ReplaceAllString(path, `([^/]+)`)
+}
+
 type RateLimiter interface {
 	Allow(ctx context.Context, key string) (bool, *limiter.Context, error)
 }
@@ -60,6 +97,7 @@ type LimitReachedHandler func(w http.ResponseWriter, r *http.Request)
 type RateLimiterService struct {
 	client         redis.Client
 	ruleSelector   RuleSelector
+	pathMatcher    PathMatcher
 	OnLimitReached LimitReachedHandler
 	configs        map[string]EndpointConfig
 	limiters       map[string]map[RateLimitStrategy]RateLimiter
@@ -98,6 +136,7 @@ func NewRateLimiterService(client redis.Client, opts ...ServiceOption) (*RateLim
 	r := &RateLimiterService{
 		client:       client,
 		ruleSelector: &DefaultRuleSelector{},
+		pathMatcher:  &PatternPathMatcher{},
 		configs:      make(map[string]EndpointConfig),
 		limiters:     make(map[string]map[RateLimitStrategy]RateLimiter),
 	}
@@ -178,7 +217,7 @@ func (s *RateLimiterService) Middleware() func(http.Handler) http.Handler {
 			// Find the endpoint configuration for the requested path and method
 			var config EndpointConfig
 			for _, cfg := range s.configs {
-				if cfg.Path == r.URL.Path && cfg.Method == r.Method {
+				if cfg.Method == r.Method && s.pathMatcher.Match(cfg.Path, r.URL.Path) {
 					config = cfg
 					break
 				}
