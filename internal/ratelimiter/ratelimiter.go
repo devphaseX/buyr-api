@@ -215,16 +215,16 @@ func (s *RateLimiterService) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Find the endpoint configuration for the requested path and method
-			var config EndpointConfig
+			var config *EndpointConfig
 			for _, cfg := range s.configs {
 				if cfg.Method == r.Method && s.pathMatcher.Match(cfg.Path, r.URL.Path) {
-					config = cfg
+					config = &cfg
 					break
 				}
 			}
 
 			// If no configuration is found, proceed to the next handler
-			if config.Path == "" {
+			if config == nil || config.Path == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
